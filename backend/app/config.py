@@ -5,6 +5,9 @@ load_dotenv(override=True)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-nano")
+# Advisor chat routes coursework help to the tutor model; both fall back to OPENAI_MODEL.
+OPENAI_MODEL_CHAT = os.getenv("OPENAI_MODEL_CHAT") or OPENAI_MODEL
+OPENAI_MODEL_TUTOR = os.getenv("OPENAI_MODEL_TUTOR") or OPENAI_MODEL_CHAT
 TRANSCRIPT_MODEL = os.getenv("TRANSCRIPT_MODEL", "gpt-5.4-nano")
 APP_ENV = os.getenv("APP_ENV", "development")
 CORS_ALLOWED_ORIGINS = [

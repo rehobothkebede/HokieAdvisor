@@ -202,6 +202,15 @@ struct ChatPayload: Encodable {
 
 struct ChatResponse: Decodable {
     let reply: String
+    let truncated: Bool?
+}
+
+/// One item from the chat stream: answer text, or a control event the server
+/// sends after the last token.
+enum ChatStreamEvent: Equatable {
+    case token(String)
+    /// OpenAI's finish reason; "length" means the answer hit the token limit.
+    case finish(reason: String)
 }
 
 // MARK: - Transcript

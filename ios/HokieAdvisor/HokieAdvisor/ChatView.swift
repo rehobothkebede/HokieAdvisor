@@ -215,6 +215,9 @@ struct ChatView: View {
                         } else {
                             LazyVStack(spacing: 10) {
                                 ForEach(vm.messages) { MessageBubble(message: $0) }
+                                if vm.canContinueTruncatedAnswer && vm.isReadyForMessage {
+                                    ContinueAnswerChip { Task { await vm.sendMessage(textOverride: ChatViewModel.continuePrompt) } }
+                                }
                                 if vm.isLoading { TypingIndicator() }
                                 if let error = vm.errorMessage { ErrorBanner(message: error) }
                                 Color.clear
@@ -824,6 +827,25 @@ struct ErrorBanner: View {
         }
         .padding(14).frame(maxWidth: .infinity)
         .glassSurface(cornerRadius: 18)
+    }
+}
+
+// MARK: - Continue Chip
+
+struct ContinueAnswerChip: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Continue answer", systemImage: "arrow.down.forward")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.vtBurgundy)
+                .padding(.horizontal, 15).padding(.vertical, 10)
+                .glassCapsule(strokeOpacity: 0.08)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHint("Asks the advisor to finish the answer that was cut off")
     }
 }
 

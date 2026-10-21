@@ -133,7 +133,7 @@ final class APIService {
         try await post(urlString: chatFunctionURL, body: request, headers: await supabaseFunctionHeaders(includeUserSession: true))
     }
 
-    static func streamChat(request: ChatRequest) -> AsyncThrowingStream<String, Error> {
+    static func streamChat(request: ChatRequest) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
                 guard let url = URL(string: "\(chatFunctionURL)/stream") else {
@@ -166,9 +166,8 @@ final class APIService {
                         guard line.hasPrefix("data: ") else { continue }
                         let payload = String(line.dropFirst(6))
                         if payload == "[DONE]" { break }
-                        if let data = payload.data(using: .utf8),
-                           let token = try? JSONDecoder().decode(String.self, from: data) {
-                            continuation.yield(token)
+                        if let event = streamEvent(from: payload) {
+                            continuation.yield(event)
                         }
                     }
                     continuation.finish()
@@ -204,6 +203,27 @@ final class APIService {
     }
 
     // MARK: - Private
+
+    /// Token payloads are JSON strings; control events are JSON objects with a
+    /// "type". Unknown event types are skipped so newer servers stay compatible.
+    private static func streamEvent(from payload: String) -> ChatStreamEvent? {
+        guard let data = payload.data(using: .utf8) else { return nil }
+        if let token = try? JSONDecoder().decode(String.self, from: data) {
+            return .token(token)
+        }
+        guard let control = try? JSONDecoder().decode(ChatStreamControl.self, from: data) else { return nil }
+        switch control.type {
+        case "finish":
+            return .finish(reason: control.reason ?? "stop")
+        default:
+            return nil
+        }
+    }
+
+    private struct ChatStreamControl: Decodable {
+        let type: String
+        let reason: String?
+    }
 
     private static func anonymousSupabaseFunctionHeaders() -> [String: String] {
         return [

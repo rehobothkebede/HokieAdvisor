@@ -12,6 +12,11 @@ final class ChatViewModel: ObservableObject {
     @Published var major: String = ""
     @Published var isLoading: Bool = false
     @Published var errorMessage: String? = nil
+    /// True when the latest answer stopped at the token limit; ChatView offers a Continue chip.
+    @Published private(set) var canContinueTruncatedAnswer = false
+
+    static let truncationNote = "\n\n*(Answer was cut off; ask me to continue.)*"
+    static let continuePrompt = "Please continue exactly where you left off."
 
     // Synced from AppState by ChatView on appear / onChange
     var transcriptCourses: [TranscriptCourse] = []
@@ -50,6 +55,7 @@ final class ChatViewModel: ObservableObject {
 
         inputText = ""
         errorMessage = nil
+        canContinueTruncatedAnswer = false
         messages.append(ChatMessage(role: "user", content: text))
         historyStore?.captureMemory(from: text)
         isLoading = true
@@ -73,22 +79,32 @@ final class ChatViewModel: ObservableObject {
         let streamID = UUID()
         activeRequestID = streamID
         var streamStarted = false
+        var finishReason: String?
 
         do {
-            for try await token in APIService.streamChat(request: chatRequest) {
+            for try await event in APIService.streamChat(request: chatRequest) {
                 guard activeRequestID == streamID else { return false }
-                if !streamStarted {
-                    streamStarted = true
-                    isLoading = false
-                    messages.append(ChatMessage(id: streamID, role: "assistant", content: "", isStreaming: true))
-                }
-                if let idx = messages.firstIndex(where: { $0.id == streamID }) {
-                    messages[idx].content += token
+                switch event {
+                case .token(let token):
+                    if !streamStarted {
+                        streamStarted = true
+                        isLoading = false
+                        messages.append(ChatMessage(id: streamID, role: "assistant", content: "", isStreaming: true))
+                    }
+                    if let idx = messages.firstIndex(where: { $0.id == streamID }) {
+                        messages[idx].content += token
+                    }
+                case .finish(let reason):
+                    finishReason = reason
                 }
             }
             guard activeRequestID == streamID else { return false }
             if let idx = messages.firstIndex(where: { $0.id == streamID }) {
                 messages[idx].isStreaming = false
+                if finishReason == "length" {
+                    messages[idx].content += Self.truncationNote
+                    canContinueTruncatedAnswer = true
+                }
             }
             activeRequestID = nil
             autoSave()
@@ -111,6 +127,7 @@ final class ChatViewModel: ObservableObject {
         activeRequestID = nil
         isLoading = false
         currentSessionID = session.id
+        canContinueTruncatedAnswer = false
         messages = session.messages.map {
             ChatMessage(id: $0.id, role: $0.role, content: $0.content, isStreaming: false)
         }
@@ -141,6 +158,7 @@ final class ChatViewModel: ObservableObject {
     private func resetConversation() {
         activeRequestID = nil
         isLoading = false
+        canContinueTruncatedAnswer = false
         messages = []
         inputText = ""
         errorMessage = nil

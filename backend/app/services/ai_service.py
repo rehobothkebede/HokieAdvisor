@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 import time
 import logging
 from openai import OpenAI, APIError, RateLimitError, APITimeoutError
-from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from app.config import OPENAI_API_KEY, OPENAI_MODEL, OPENAI_MODEL_CHAT, OPENAI_MODEL_TUTOR
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +305,25 @@ def _call_with_retry(fn, retries: int = 3, backoff: float = 1.5):
     raise RuntimeError(f"OpenAI call failed after {retries} attempts: {last_error}") from last_error
 
 
+CHAT_MAX_COMPLETION_TOKENS = 4000
+
+# Mirrors isTutorRequest in supabase/functions/chat/conversation.ts.
+_TUTOR_KEYWORDS = re.compile(
+    r"\b(proofs?|prove|induction|lemma|theorem|matri(x|ces)|eigen\w*|determinant|vector|integral|derivative|"
+    r"recurrence|big[- ]?o|complexity|algorithms?|bfs|dfs|dijkstra|graph|tree|heap|hash|recursion|pointer|"
+    r"debug\w*|compile\w*|segfault|equation|homework|problem set)\b",
+    re.IGNORECASE,
+)
+_TUTOR_MARKUP = re.compile(r"\$[^$\s][^$]*\$|\\\(|\\\[|\\begin\{|```")
+
+
+def choose_chat_model(latest_message: str) -> str:
+    """Coursework help uses the tutor model; advising uses the chat model."""
+    if _TUTOR_MARKUP.search(latest_message) or _TUTOR_KEYWORDS.search(latest_message):
+        return OPENAI_MODEL_TUTOR
+    return OPENAI_MODEL_CHAT
+
+
 def chat_stream_with_advisor(
     messages: list,
     course_context: str = "",
@@ -323,16 +343,22 @@ def chat_stream_with_advisor(
     full_messages = [{"role": "system", "content": system_prompt}] + messages
 
     stream = client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=choose_chat_model(messages[-1]["content"]),
         messages=full_messages,
         temperature=0.7,
-        max_completion_tokens=1500,
+        max_completion_tokens=CHAT_MAX_COMPLETION_TOKENS,
         stream=True,
     )
+    finish_reason = "stop"
     for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            yield f"data: {json.dumps(delta.content)}\n\n"
+        if not chunk.choices:
+            continue
+        choice = chunk.choices[0]
+        if choice.delta.content:
+            yield f"data: {json.dumps(choice.delta.content)}\n\n"
+        if choice.finish_reason:
+            finish_reason = choice.finish_reason
+    yield f"data: {json.dumps({'type': 'finish', 'reason': finish_reason})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -343,8 +369,8 @@ def chat_with_advisor(
     in_progress_courses: list[str] | None = None,
     transcript_notes: list[str] | None = None,
     chat_memories: list[str] | None = None,
-) -> str:
-    """Send a conversation to the AI advisor and return the full response."""
+) -> tuple[str, bool]:
+    """Send a conversation to the AI advisor and return (reply, truncated)."""
     student_ctx = _build_student_context(
         transcript or [],
         in_progress_courses or [],
@@ -356,12 +382,13 @@ def chat_with_advisor(
 
     def _call():
         response = client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=choose_chat_model(messages[-1]["content"]),
             messages=full_messages,
             temperature=0.7,
-            max_completion_tokens=1500,
+            max_completion_tokens=CHAT_MAX_COMPLETION_TOKENS,
         )
-        return response.choices[0].message.content
+        choice = response.choices[0]
+        return choice.message.content or "", choice.finish_reason == "length"
 
     return _call_with_retry(_call)
 

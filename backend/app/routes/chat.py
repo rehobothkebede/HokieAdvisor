@@ -38,6 +38,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    truncated: bool = False
 
 
 @router.post("", response_model=ChatResponse)
@@ -65,7 +66,7 @@ def chat(request: ChatRequest):
 
     transcript = [e.model_dump() for e in request.transcript]
     try:
-        reply = chat_with_advisor(
+        reply, truncated = chat_with_advisor(
             messages,
             course_context=course_context,
             transcript=transcript,
@@ -76,7 +77,7 @@ def chat(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=error_detail("CHAT_AI_REQUEST_FAILED", f"AI service error: {str(e)}"))
 
-    return ChatResponse(reply=reply)
+    return ChatResponse(reply=reply, truncated=truncated)
 
 
 def _sanitize_messages(messages: list[Message]) -> list[dict[str, str]]:

@@ -1,10 +1,6 @@
 import { requireUser } from "../_shared/auth.ts";
 import { buildAcademicContext, type TranscriptEntry } from "./context.ts";
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
+import { type ChatMessage, chooseModel, trimHistory } from "./conversation.ts";
 
 type ChatRequest = {
   messages?: unknown[];
@@ -24,6 +20,7 @@ const corsHeaders = {
 const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 8000;
 const DEFAULT_DAILY_LIMIT = 60;
+const MAX_COMPLETION_TOKENS = 4000;
 
 // Institution-specific rules. When migration 005 is live this comes from
 // institutions.prompt_context for the student's institution.
@@ -92,17 +89,20 @@ Deno.serve(async (req) => {
     );
   }
 
-  const openAIModel = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-nano";
-  const prompt = await buildPrompt(body, auth.user.id, conversation[conversation.length - 1].content);
+  const latestMessage = conversation[conversation.length - 1].content;
+  const { model: openAIModel } = chooseModel(latestMessage);
+  const prompt = await buildPrompt(body, auth.user.id, latestMessage);
+  const { recent, earlierDigest } = trimHistory(conversation);
   const messages = [
     { role: "system", content: prompt },
-    ...conversation,
+    ...(earlierDigest ? [{ role: "system", content: earlierDigest }] : []),
+    ...recent,
   ];
 
   const shouldStream = new URL(req.url).pathname.endsWith("/stream");
 
   try {
-    const openAIResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openAIResponse = await fetch(`${openAIBaseURL()}/chat/completions`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${openAIKey}`,
@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: openAIModel,
         messages,
-        max_completion_tokens: 1500,
+        max_completion_tokens: MAX_COMPLETION_TOKENS,
         stream: shouldStream,
       }),
     });
@@ -132,7 +132,11 @@ Deno.serve(async (req) => {
     }
 
     const data = await openAIResponse.json();
-    return json({ reply: data.choices?.[0]?.message?.content ?? "" });
+    const choice = data.choices?.[0];
+    return json({
+      reply: choice?.message?.content ?? "",
+      truncated: choice?.finish_reason === "length",
+    });
   } catch (error) {
     console.warn(`Chat AI service error: ${errorMessage(error)}`);
     return json({
@@ -260,17 +264,36 @@ async function consumeChatQuota(userId: string): Promise<{ allowed: boolean; lim
   }
 }
 
-function streamOpenAIResponse(openAIResponse: Response): Response {
+// Relays OpenAI's stream as SSE. Token payloads are JSON strings (what shipped
+// iOS builds decode); control events are JSON objects with a "type", which
+// older clients ignore. After the last token: {"type":"finish","reason":...},
+// any trailing events (e.g. extracted memories), then [DONE].
+function streamOpenAIResponse(
+  openAIResponse: Response,
+  trailingEvents: () => Promise<Record<string, unknown>[]> = () => Promise.resolve([]),
+): Response {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = "";
+  let finishReason: string | null = null;
 
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = openAIResponse.body?.getReader();
-      if (!reader) {
+      const send = (payload: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      const finish = async () => {
+        send({ type: "finish", reason: finishReason ?? "stop" });
+        try {
+          for (const event of await trailingEvents()) send(event);
+        } catch (error) {
+          console.warn(`Chat trailing events failed: ${errorMessage(error)}`);
+        }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
+      };
+
+      const reader = openAIResponse.body?.getReader();
+      if (!reader) {
+        await finish();
         return;
       }
 
@@ -286,23 +309,21 @@ function streamOpenAIResponse(openAIResponse: Response): Response {
             if (!line.startsWith("data: ")) continue;
             const payload = line.slice(6).trim();
             if (payload === "[DONE]") {
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
+              await finish();
               return;
             }
             try {
               const data = JSON.parse(payload);
-              const token = data.choices?.[0]?.delta?.content;
-              if (token) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(token)}\n\n`));
-              }
+              const choice = data.choices?.[0];
+              const token = choice?.delta?.content;
+              if (token) send(token);
+              if (choice?.finish_reason) finishReason = choice.finish_reason;
             } catch {
               // Ignore malformed provider chunks and keep streaming.
             }
           }
         }
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
+        await finish();
       } catch (error) {
         controller.error(error);
       }
@@ -316,6 +337,11 @@ function streamOpenAIResponse(openAIResponse: Response): Response {
       "Cache-Control": "no-cache",
     },
   });
+}
+
+// Overridable for local testing against a mock; production uses OpenAI.
+function openAIBaseURL(): string {
+  return (Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1").replace(/\/$/, "");
 }
 
 function errorJSON(code: string, message: string, status: number): Response {
