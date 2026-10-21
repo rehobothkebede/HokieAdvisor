@@ -1,6 +1,7 @@
 import { requireUser } from "../_shared/auth.ts";
 import { buildAcademicContext, type TranscriptEntry } from "./context.ts";
 import { type ChatMessage, chooseModel, trimHistory } from "./conversation.ts";
+import { hasAttachments, isAttachmentError, parseAttachments, userContent } from "./attachments.ts";
 
 type ChatRequest = {
   messages?: unknown[];
@@ -9,6 +10,7 @@ type ChatRequest = {
   in_progress_courses?: string[];
   transcript_notes?: string[];
   chat_memories?: string[];
+  attachments?: unknown;
 };
 
 const corsHeaders = {
@@ -39,6 +41,7 @@ Operating rules:
 - For course recommendations, only suggest courses whose prerequisites the student has met (or is completing this term), and say which requirement each one fills.
 - For transcript rulings, answer yes/no first, then explain the specific courses and grades.
 - Never fabricate requirements. If a requirement is not in context, say what is known and what still needs confirmation.
+- When the student attaches a photo or document, work from what it actually shows. If part of it is unreadable, say which part instead of guessing.
 - Be concise, warm, and concrete. Prefer short paragraphs and bullets.
 - For math, algorithms, proofs, matrices, and recurrence relations, use LaTeX where helpful.
 - For graph theory, trees, paths, circuits, BFS/DFS, shortest paths, state machines, or prerequisite chains, include a fenced graph block the app renders as a diagram, then explain it in 2-4 short bullets.
@@ -98,6 +101,11 @@ Deno.serve(async (req) => {
     );
   }
 
+  const attachments = parseAttachments(body.attachments);
+  if (isAttachmentError(attachments)) {
+    return errorJSON(attachments.code, attachments.message, attachments.status);
+  }
+
   const openAIKey = Deno.env.get("OPENAI_API_KEY");
   if (!openAIKey) {
     console.warn("Chat: OPENAI_API_KEY is not configured.");
@@ -114,13 +122,14 @@ Deno.serve(async (req) => {
   }
 
   const latestMessage = conversation[conversation.length - 1].content;
-  const { model: openAIModel } = chooseModel(latestMessage);
+  const { model: openAIModel } = chooseModel(latestMessage, hasAttachments(attachments));
   const prompt = await buildPrompt(body, auth.user.id, latestMessage);
   const { recent, earlierDigest } = trimHistory(conversation);
   const messages = [
     { role: "system", content: prompt },
     ...(earlierDigest ? [{ role: "system", content: earlierDigest }] : []),
-    ...recent,
+    ...recent.slice(0, -1),
+    { role: "user", content: userContent(latestMessage, attachments) },
   ];
 
   const shouldStream = new URL(req.url).pathname.endsWith("/stream");

@@ -33,15 +33,11 @@ struct ChatView: View {
     }
 
     private var draftMessageText: String {
-        let text = vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let selectedAttachment else { return text }
-        return text.isEmpty
-            ? selectedAttachment.promptContext
-            : "\(selectedAttachment.promptContext)\n\n\(text)"
+        vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var canSubmitDraft: Bool {
-        vm.canSend(text: draftMessageText)
+        vm.canSend(text: draftMessageText, attachment: selectedAttachment?.payload)
     }
 
     private var draftOverflow: Int {
@@ -120,12 +116,9 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showCameraPicker) {
             CameraCaptureView { image in
-                selectedAttachment = ChatAttachment(
-                    kind: .camera,
-                    name: "Camera photo",
-                    image: image,
-                    data: image.jpegData(compressionQuality: 0.86)
-                )
+                attach(kind: .camera) {
+                    try ChatAttachmentProcessor.prepareImage(image, name: "Camera photo")
+                }
             }
             .ignoresSafeArea()
         }
@@ -491,7 +484,7 @@ struct ChatView: View {
 
     private func sendDraft() {
         let textToSend = draftMessageText
-        guard vm.canSend(text: textToSend) else { return }
+        guard vm.canSend(text: textToSend, attachment: selectedAttachment?.payload) else { return }
         let attachmentToRestore = selectedAttachment
         let typedTextToRestore = vm.inputText
 
@@ -501,7 +494,7 @@ struct ChatView: View {
         selectedAttachment = nil
 
         Task { @MainActor in
-            let sent = await vm.sendMessage(textOverride: textToSend)
+            let sent = await vm.sendMessage(textOverride: textToSend, attachment: attachmentToRestore?.payload)
             if !sent {
                 selectedAttachment = attachmentToRestore
                 vm.inputText = typedTextToRestore
@@ -510,26 +503,14 @@ struct ChatView: View {
     }
 
     private func handlePickedPhoto(_ item: PhotosPickerItem) async {
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self) else { return }
-            let type = item.supportedContentTypes.first ?? .image
-            let extensionName = type.preferredFilenameExtension ?? "jpg"
-            await MainActor.run {
-                selectedAttachment = ChatAttachment(
-                    kind: .photo,
-                    name: "Photo.\(extensionName)",
-                    image: UIImage(data: data),
-                    data: data
-                )
-                selectedPhotoItem = nil
-                showAttachmentMenu = false
-            }
-        } catch {
-            await MainActor.run {
-                vm.errorMessage = "Could not load the selected photo."
-                selectedPhotoItem = nil
-                showAttachmentMenu = false
-            }
+        selectedPhotoItem = nil
+        showAttachmentMenu = false
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            vm.errorMessage = "Could not load the selected photo."
+            return
+        }
+        attach(kind: .photo) {
+            try ChatAttachmentProcessor.prepareImageData(data, name: "Photo")
         }
     }
 
@@ -540,14 +521,26 @@ struct ChatView: View {
             vm.errorMessage = "Could not open the selected file."
         case .success(let urls):
             guard let url = urls.first else { return }
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            selectedAttachment = ChatAttachment(
-                kind: .file,
-                name: url.lastPathComponent,
-                image: nil,
-                data: try? Data(contentsOf: url)
-            )
+            attach(kind: .file) {
+                let accessing = url.startAccessingSecurityScopedResource()
+                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                return try ChatAttachmentProcessor.prepareFile(at: url)
+            }
+        }
+    }
+
+    /// Prepares an attachment off the main thread (downscaling, PDF text
+    /// extraction) and shows any size or type problem right away.
+    private func attach(kind: ChatAttachment.Kind, _ prepare: @escaping @Sendable () throws -> ChatAttachmentProcessor.Prepared) {
+        vm.errorMessage = nil
+        Task {
+            do {
+                let prepared = try await Task.detached(priority: .userInitiated) { try prepare() }.value
+                selectedAttachment = ChatAttachment(kind: kind, prepared: prepared)
+            } catch {
+                selectedAttachment = nil
+                vm.errorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -597,12 +590,15 @@ struct ChatAttachment: Identifiable {
     let kind: Kind
     let name: String
     let image: UIImage?
-    let data: Data?
+    let summary: String
+    let payload: ChatAttachmentPayload
 
-    var promptContext: String {
-        let sizeText = data.map { ByteCountFormatter.string(fromByteCount: Int64($0.count), countStyle: .file) }
-        let sizeSuffix = sizeText.map { " (\($0))" } ?? ""
-        return "Attachment queued in Hokie Advisor: \(kind.label.lowercased()) \"\(name)\"\(sizeSuffix). Direct file analysis is not connected yet, so use any written context below and ask me for a description if you need the file contents."
+    init(kind: Kind, prepared: ChatAttachmentProcessor.Prepared) {
+        self.kind = kind
+        self.name = prepared.payload.name
+        self.image = prepared.thumbnail
+        self.summary = prepared.summary
+        self.payload = prepared.payload
     }
 }
 
@@ -630,7 +626,7 @@ struct ChatAttachmentChip: View {
                 Text(attachment.kind.label)
                     .font(.caption.bold())
                     .foregroundStyle(.primary)
-                Text(attachment.name)
+                Text("\(attachment.name) · \(attachment.summary)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

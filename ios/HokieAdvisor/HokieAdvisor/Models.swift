@@ -186,12 +186,34 @@ struct ChatRequest: Encodable {
     let inProgressCourses: [String]
     let transcriptNotes: [String]
     let chatMemories: [String]
+    /// Files attached to the newest user message only; never resent with history.
+    var attachments: [ChatAttachmentPayload] = []
 
     enum CodingKeys: String, CodingKey {
-        case messages, major, transcript
+        case messages, major, transcript, attachments
         case inProgressCourses = "in_progress_courses"
         case transcriptNotes = "transcript_notes"
         case chatMemories = "chat_memories"
+    }
+}
+
+/// An attachment as the chat function receives it: a downscaled JPEG photo or
+/// text extracted on-device from a PDF or text file.
+struct ChatAttachmentPayload: Encodable, Equatable {
+    enum Kind: String, Encodable {
+        case image, document
+    }
+
+    let type: Kind
+    let name: String
+    var mimeType: String? = nil
+    var dataBase64: String? = nil
+    var text: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case type, name, text
+        case mimeType = "mime_type"
+        case dataBase64 = "data_base64"
     }
 }
 

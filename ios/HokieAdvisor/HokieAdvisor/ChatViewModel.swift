@@ -36,9 +36,9 @@ final class ChatViewModel: ObservableObject {
         canSend(text: inputText)
     }
 
-    func canSend(text: String) -> Bool {
+    func canSend(text: String, attachment: ChatAttachmentPayload? = nil) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty
+        return (!trimmed.isEmpty || attachment != nil)
             && trimmed.count <= Self.maxMessageCharacters
             && isReadyForMessage
     }
@@ -48,10 +48,22 @@ final class ChatViewModel: ObservableObject {
     }
 
     @discardableResult
-    func sendMessage(textOverride: String? = nil) async -> Bool {
+    func sendMessage(textOverride: String? = nil, attachment: ChatAttachmentPayload? = nil) async -> Bool {
         let sourceText = textOverride ?? inputText
-        let text = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canSend(text: text) else { return false }
+        let typed = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canSend(text: typed, attachment: attachment) else { return false }
+
+        // The saved message names the attachment; its bytes are sent only with
+        // this request and never stored in chat history.
+        var text = typed
+        if let attachment {
+            if text.isEmpty {
+                text = attachment.type == .image
+                    ? "Can you help me with this photo?"
+                    : "Can you help me with this document?"
+            }
+            text += "\n\n📎 \(attachment.name)"
+        }
 
         inputText = ""
         errorMessage = nil
@@ -73,7 +85,8 @@ final class ChatViewModel: ObservableObject {
             transcript: transcriptEntries,
             inProgressCourses: inProgressSummary,
             transcriptNotes: transcriptNotes,
-            chatMemories: historyStore?.memoryContext ?? []
+            chatMemories: historyStore?.memoryContext ?? [],
+            attachments: attachment.map { [$0] } ?? []
         )
 
         let streamID = UUID()
@@ -117,7 +130,7 @@ final class ChatViewModel: ObservableObject {
             messages.removeAll { $0.id == streamID }
             if messages.last?.role == "user" { messages.removeLast() }
             errorMessage = error.localizedDescription
-            inputText = text
+            inputText = typed
             return false
         }
     }
