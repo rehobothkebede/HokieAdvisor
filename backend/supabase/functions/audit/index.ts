@@ -7,9 +7,9 @@ import {
   normalizeGrade,
   numberOrNull,
   persistRows,
-  resolveAuthContext,
   stringArray,
 } from "../_shared/academic.ts";
+import { requireUser } from "../_shared/auth.ts";
 
 type TranscriptEntry = {
   code: string;
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
     return methodNotAllowed();
   }
 
-  const auth = await resolveAuthContext(req);
+  const auth = await requireUser(req);
   if (auth.response) return auth.response;
 
   let body: Record<string, unknown>;
@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
   const transcript = Array.isArray(body.transcript) ? body.transcript.map(normalizeEntry).filter((entry) => entry.code) : [];
   const inProgressCourses = stringArray(body.in_progress_courses).map(normalizeCode).filter(Boolean);
   const result = await runDegreeAudit(transcript, inProgressCourses);
-  await persistDegreeAudit(auth.userId, result);
+  await persistDegreeAudit(auth.user.id, result);
   return json(result);
 });
 
@@ -466,7 +466,7 @@ function bucket(input: {
   statusOverride?: string;
 }): AuditBucket {
   const status = input.statusOverride ||
-    (input.completedCredits >= input.requiredCredits && (input.requiredCount === undefined || (input.completedCount || 0) >= input.requiredCount)
+    (input.completedCredits >= input.requiredCredits && (input.requiredCount == null || (input.completedCount || 0) >= input.requiredCount)
       ? "complete"
       : input.completedCredits > 0 || input.matchedCourses.length > 0
       ? "in_progress"

@@ -3,6 +3,10 @@ import Foundation
 
 @MainActor
 final class ChatViewModel: ObservableObject {
+    /// Mirrors the chat Edge Function's input caps.
+    static let maxMessageCharacters = 8_000
+    static let maxHistoryMessages = 40
+
     @Published var messages: [ChatMessage] = []
     @Published var inputText: String = ""
     @Published var major: String = ""
@@ -28,7 +32,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     func canSend(text: String) -> Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && isReadyForMessage
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty
+            && trimmed.count <= Self.maxMessageCharacters
+            && isReadyForMessage
     }
 
     func configure(store: ChatHistoryStore) {
@@ -47,7 +54,9 @@ final class ChatViewModel: ObservableObject {
         historyStore?.captureMemory(from: text)
         isLoading = true
 
-        let payload = messages.map { ChatPayload(role: $0.role, content: $0.content) }
+        let payload = messages
+            .suffix(Self.maxHistoryMessages)
+            .map { ChatPayload(role: $0.role, content: $0.content) }
         let transcriptEntries = transcriptCourses.map {
             TranscriptEntry(code: $0.code, name: $0.name, grade: $0.grade,
                             semester: $0.semester, credits: $0.credits)

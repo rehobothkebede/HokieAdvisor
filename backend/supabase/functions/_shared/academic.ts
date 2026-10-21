@@ -11,11 +11,6 @@ export type UploadedFile = {
   size: number;
 };
 
-export type AuthContext = {
-  userId: string | null;
-  response?: Response;
-};
-
 type OpenAIJsonInput = {
   prompt: string;
   fileName: string;
@@ -177,40 +172,6 @@ export async function extractJsonFromOpenAI(input: OpenAIJsonInput): Promise<Rec
       502,
     );
   }
-}
-
-export async function resolveAuthContext(req: Request): Promise<AuthContext> {
-  const authorization = req.headers.get("authorization") || "";
-  const token = authorization.toLowerCase().startsWith("bearer ")
-    ? authorization.slice("bearer ".length).trim()
-    : "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-
-  if (!token || token === anonKey) {
-    return { userId: null };
-  }
-
-  const supabaseURL = Deno.env.get("SUPABASE_URL");
-  if (!supabaseURL || !anonKey) {
-    return { userId: null };
-  }
-
-  const userResponse = await fetch(`${supabaseURL}/auth/v1/user`, {
-    headers: {
-      "apikey": anonKey,
-      "Authorization": `Bearer ${token}`,
-    },
-  });
-
-  if (!userResponse.ok) {
-    return {
-      userId: null,
-      response: errorResponse("AUTH_INVALID_SESSION", "Invalid or expired session. Please sign in again.", 401),
-    };
-  }
-
-  const user = await userResponse.json();
-  return { userId: typeof user?.id === "string" ? user.id : null };
 }
 
 export async function persistRows(

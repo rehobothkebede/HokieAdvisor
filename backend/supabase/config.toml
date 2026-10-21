@@ -35,7 +35,7 @@ file_size_limit = "12MiB"
 
 [functions.chat]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 import_map = "./functions/chat/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -51,20 +51,20 @@ entrypoint = "./functions/account/index.ts"
 
 [functions.transcript]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 entrypoint = "./functions/transcript/index.ts"
 
 [functions.dars]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 entrypoint = "./functions/dars/index.ts"
 
 [functions.audit]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 entrypoint = "./functions/audit/index.ts"
 
 [functions.tutoring]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 entrypoint = "./functions/tutoring/index.ts"

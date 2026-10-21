@@ -8,10 +8,10 @@ import {
   objectArray,
   persistRows,
   readMultipartFile,
-  resolveAuthContext,
   slug,
   stringArray,
 } from "../_shared/academic.ts";
+import { requireUser } from "../_shared/auth.ts";
 
 const ALLOWED_TYPES = new Set(["application/pdf", "image/png", "image/jpeg"]);
 const MAX_BYTES = 12 * 1024 * 1024;
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     return methodNotAllowed();
   }
 
-  const auth = await resolveAuthContext(req);
+  const auth = await requireUser(req);
   if (auth.response) return auth.response;
 
   const upload = await readMultipartFile(req, ALLOWED_TYPES, MAX_BYTES, "DARS", "DARS");
@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  await persistDarsAudit(auth.userId, result);
+  await persistDarsAudit(auth.user.id, result);
   return json(result);
 });
 

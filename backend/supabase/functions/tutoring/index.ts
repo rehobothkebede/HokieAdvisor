@@ -5,6 +5,7 @@ import {
   methodNotAllowed,
   stringArray,
 } from "../_shared/academic.ts";
+import { requireUser } from "../_shared/auth.ts";
 
 type TutoringRequest = {
   struggling_courses?: string[];
@@ -20,6 +21,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return methodNotAllowed();
   }
+
+  const auth = await requireUser(req);
+  if (auth.response) return auth.response;
 
   let body: TutoringRequest;
   try {

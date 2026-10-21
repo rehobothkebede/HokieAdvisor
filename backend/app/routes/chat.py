@@ -8,6 +8,11 @@ from app.services.coe_service import get_coe_context_for_major, resolve_full_maj
 
 router = APIRouter(prefix="/chat", tags=["Advisor Chat"])
 
+# Mirrors the chat Edge Function's input caps.
+MAX_MESSAGES = 40
+MAX_MESSAGE_CHARS = 8000
+ALLOWED_ROLES = {"user", "assistant"}
+
 
 class Message(BaseModel):
     role: str
@@ -52,10 +57,7 @@ def chat(request: ChatRequest):
       ]
     }
     """
-    if not request.messages:
-        raise HTTPException(status_code=400, detail=error_detail("CHAT_MESSAGES_REQUIRED", "messages cannot be empty"))
-
-    messages = [m.model_dump() for m in request.messages]
+    messages = _sanitize_messages(request.messages)
     course_context = ""
     if request.major:
         full_name = resolve_full_major_name(request.major)
@@ -77,13 +79,31 @@ def chat(request: ChatRequest):
     return ChatResponse(reply=reply)
 
 
+def _sanitize_messages(messages: list[Message]) -> list[dict[str, str]]:
+    """Keep only user/assistant turns, the last MAX_MESSAGES of them, and enforce
+    the per-message cap on the newest turn (older turns are truncated)."""
+    cleaned = [
+        {"role": m.role, "content": m.content}
+        for m in messages
+        if m.role in ALLOWED_ROLES and m.content.strip()
+    ][-MAX_MESSAGES:]
+    if not cleaned or cleaned[-1]["role"] != "user":
+        raise HTTPException(status_code=400, detail=error_detail("CHAT_MESSAGES_REQUIRED", "Send a message to start the conversation."))
+    if len(cleaned[-1]["content"]) > MAX_MESSAGE_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=error_detail("CHAT_MESSAGE_TOO_LONG", f"That message is too long. Keep it under {MAX_MESSAGE_CHARS:,} characters."),
+        )
+    for message in cleaned[:-1]:
+        if len(message["content"]) > MAX_MESSAGE_CHARS:
+            message["content"] = message["content"][:MAX_MESSAGE_CHARS] + "…"
+    return cleaned
+
+
 @router.post("/stream")
 def chat_stream(request: ChatRequest):
     """Stream the AI advisor response token by token via Server-Sent Events."""
-    if not request.messages:
-        raise HTTPException(status_code=400, detail=error_detail("CHAT_MESSAGES_REQUIRED", "messages cannot be empty"))
-
-    messages = [m.model_dump() for m in request.messages]
+    messages = _sanitize_messages(request.messages)
     course_context = ""
     if request.major:
         full_name = resolve_full_major_name(request.major)

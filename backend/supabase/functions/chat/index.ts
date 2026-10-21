@@ -1,5 +1,7 @@
+import { requireUser } from "../_shared/auth.ts";
+
 type ChatMessage = {
-  role: "system" | "user" | "assistant" | "tool";
+  role: "user" | "assistant";
   content: string;
 };
 
@@ -12,7 +14,7 @@ type TranscriptEntry = {
 };
 
 type ChatRequest = {
-  messages?: ChatMessage[];
+  messages?: unknown[];
   major?: string;
   transcript?: TranscriptEntry[];
   in_progress_courses?: string[];
@@ -25,6 +27,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const MAX_MESSAGES = 40;
+const MAX_MESSAGE_CHARS = 8000;
+const DEFAULT_DAILY_LIMIT = 60;
 
 const systemPrompt = `You are Hokie Advisor, a personalized academic advisor and CS/math tutor for Virginia Tech students.
 
@@ -46,33 +52,51 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return json({ detail: "Method not allowed" }, 405);
+    return errorJSON("METHOD_NOT_ALLOWED", "Method not allowed.", 405);
   }
+
+  const auth = await requireUser(req);
+  if (auth.response) return auth.response;
 
   let body: ChatRequest;
   try {
     body = await req.json();
   } catch {
-    return json({ detail: "Invalid JSON body." }, 400);
+    return errorJSON("CHAT_INVALID_JSON", "Invalid JSON body.", 400);
   }
 
-  if (!body.messages?.length) {
-    return json({ detail: "messages cannot be empty" }, 400);
+  const conversation = sanitizeMessages(body.messages);
+  if (!conversation.length || conversation[conversation.length - 1].role !== "user") {
+    return errorJSON("CHAT_MESSAGES_REQUIRED", "Send a message to start the conversation.", 400);
+  }
+  if (conversation[conversation.length - 1].content.length > MAX_MESSAGE_CHARS) {
+    return errorJSON(
+      "CHAT_MESSAGE_TOO_LONG",
+      `That message is too long. Keep it under ${MAX_MESSAGE_CHARS.toLocaleString("en-US")} characters.`,
+      400,
+    );
   }
 
   const openAIKey = Deno.env.get("OPENAI_API_KEY");
   if (!openAIKey) {
-    return json({ detail: "OPENAI_API_KEY is not configured." }, 500);
+    console.warn("Chat: OPENAI_API_KEY is not configured.");
+    return errorJSON("CHAT_AI_REQUEST_FAILED", "The advisor is not configured right now. Try again later.", 500);
+  }
+
+  const quota = await consumeChatQuota(auth.user.id);
+  if (!quota.allowed) {
+    return errorJSON(
+      "CHAT_RATE_LIMITED",
+      `You've reached today's ${quota.limit} advisor messages. Your limit resets at midnight Eastern.`,
+      429,
+    );
   }
 
   const openAIModel = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-nano";
   const prompt = await buildPrompt(body);
   const messages = [
     { role: "system", content: prompt },
-    ...body.messages.map((message) => ({
-      role: sanitizeRole(message.role),
-      content: String(message.content ?? ""),
-    })),
+    ...conversation,
   ];
 
   const shouldStream = new URL(req.url).pathname.endsWith("/stream");
@@ -223,11 +247,63 @@ function subjectForMajor(major: string): string {
   return "";
 }
 
-function sanitizeRole(role: string): ChatMessage["role"] {
-  if (role === "user" || role === "assistant" || role === "system" || role === "tool") {
-    return role;
+// Only user/assistant turns are accepted from the client; system and tool roles
+// would let a caller override the advisor's instructions. The newest message is
+// length-checked by the caller; older turns are truncated rather than rejected
+// because long assistant answers routinely exceed the per-message cap.
+function sanitizeMessages(raw: unknown): ChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+  const messages: ChatMessage[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const { role, content } = item as Record<string, unknown>;
+    if (role !== "user" && role !== "assistant") continue;
+    const text = typeof content === "string" ? content : "";
+    if (!text.trim()) continue;
+    messages.push({ role, content: text });
   }
-  return "user";
+  const recent = messages.slice(-MAX_MESSAGES);
+  return recent.map((message, index) =>
+    index === recent.length - 1 || message.content.length <= MAX_MESSAGE_CHARS
+      ? message
+      : { ...message, content: `${message.content.slice(0, MAX_MESSAGE_CHARS)}…` }
+  );
+}
+
+// Atomically counts this request against the user's daily allowance
+// (consume_chat_quota in migration 006). If the quota RPC is unavailable, for
+// example before 006 is applied, the request is allowed and the failure logged
+// so chat keeps working; authentication is still enforced.
+async function consumeChatQuota(userId: string): Promise<{ allowed: boolean; limit: number }> {
+  const limit = Number(Deno.env.get("CHAT_DAILY_LIMIT")) || DEFAULT_DAILY_LIMIT;
+  const supabaseURL = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseURL || !serviceRoleKey) {
+    console.warn("Chat quota skipped: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.");
+    return { allowed: true, limit };
+  }
+
+  try {
+    const response = await fetch(`${supabaseURL}/rest/v1/rpc/consume_chat_quota`, {
+      method: "POST",
+      headers: {
+        "apikey": serviceRoleKey,
+        "Authorization": `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user_id: userId, p_limit: limit }),
+    });
+    if (!response.ok) {
+      console.warn(`Chat quota check failed with status ${response.status}: ${await safeErrorText(response)}`);
+      return { allowed: true, limit };
+    }
+    const rows = await response.json();
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    return { allowed: row?.allowed !== false, limit };
+  } catch (error) {
+    console.warn(`Chat quota check error: ${errorMessage(error)}`);
+    return { allowed: true, limit };
+  }
 }
 
 function streamOpenAIResponse(openAIResponse: Response): Response {
@@ -286,6 +362,10 @@ function streamOpenAIResponse(openAIResponse: Response): Response {
       "Cache-Control": "no-cache",
     },
   });
+}
+
+function errorJSON(code: string, message: string, status: number): Response {
+  return json({ detail: { code, message } }, status);
 }
 
 function json(body: unknown, status = 200): Response {

@@ -29,6 +29,8 @@ enum APIError: LocalizedError {
         case .serverError:
             return "We could not complete that request right now. Check your connection and try again."
         case .serverMessage(let statusCode, _, let message):
+            // Session and quota messages are written for students; the status code adds nothing.
+            if statusCode == 401 || statusCode == 429 { return message }
             return "\(message) (HTTP \(statusCode))"
         case .decodingError:       return "Could not read server response."
         }
@@ -54,6 +56,8 @@ enum APIError: LocalizedError {
                 return "Unsupported file"
             case 422:
                 return "Could not process file"
+            case 429:
+                return "Daily limit reached"
             case 500...599:
                 return "Server error"
             default:

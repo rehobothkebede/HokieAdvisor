@@ -44,6 +44,10 @@ struct ChatView: View {
         vm.canSend(text: draftMessageText)
     }
 
+    private var draftOverflow: Int {
+        draftMessageText.count - ChatViewModel.maxMessageCharacters
+    }
+
     private var keyboardAnimation: Animation {
         reduceMotion
             ? .easeOut(duration: 0.18)
@@ -375,6 +379,14 @@ struct ChatView: View {
                         removal: .scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity)
                     )
                 )
+            }
+
+            if draftOverflow > 0 {
+                Text("Message is \(draftOverflow.formatted()) characters over the \(ChatViewModel.maxMessageCharacters.formatted())-character limit.")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.vtBurgundy)
+                    .padding(.leading, 66)
+                    .transition(.opacity)
             }
 
             ZStack(alignment: .bottomLeading) {
