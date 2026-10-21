@@ -233,6 +233,8 @@ enum ChatStreamEvent: Equatable {
     case token(String)
     /// OpenAI's finish reason; "length" means the answer hit the token limit.
     case finish(reason: String)
+    /// Short facts about the student the server extracted from their message.
+    case memories([String])
 }
 
 // MARK: - Transcript

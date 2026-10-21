@@ -2,6 +2,7 @@ import { requireUser } from "../_shared/auth.ts";
 import { buildAcademicContext, type TranscriptEntry } from "./context.ts";
 import { type ChatMessage, chooseModel, trimHistory } from "./conversation.ts";
 import { hasAttachments, isAttachmentError, parseAttachments, userContent } from "./attachments.ts";
+import { extractMemories } from "./memory.ts";
 
 type ChatRequest = {
   messages?: unknown[];
@@ -133,6 +134,12 @@ Deno.serve(async (req) => {
   ];
 
   const shouldStream = new URL(req.url).pathname.endsWith("/stream");
+  const memories = extractMemories(
+    latestMessage,
+    Array.isArray(body.chat_memories) ? body.chat_memories.map(String) : [],
+    openAIKey,
+    openAIBaseURL(),
+  );
 
   try {
     const openAIResponse = await fetch(`${openAIBaseURL()}/chat/completions`, {
@@ -161,7 +168,10 @@ Deno.serve(async (req) => {
     }
 
     if (shouldStream) {
-      return streamOpenAIResponse(openAIResponse);
+      return streamOpenAIResponse(openAIResponse, async () => {
+        const items = await memories;
+        return items.length ? [{ type: "memories", items }] : [];
+      });
     }
 
     const data = await openAIResponse.json();
@@ -169,6 +179,7 @@ Deno.serve(async (req) => {
     return json({
       reply: choice?.message?.content ?? "",
       truncated: choice?.finish_reason === "length",
+      memories: await memories,
     });
   } catch (error) {
     console.warn(`Chat AI service error: ${errorMessage(error)}`);

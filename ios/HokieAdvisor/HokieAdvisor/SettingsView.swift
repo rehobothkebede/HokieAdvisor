@@ -566,6 +566,7 @@ struct ChatMemoryEditorView: View {
     @EnvironmentObject var chatHistory: ChatHistoryStore
     @Environment(\.dismiss) private var dismiss
     @State private var newMemory = ""
+    @State private var confirmDeleteAll = false
 
     var body: some View {
         NavigationStack {
@@ -642,12 +643,28 @@ struct ChatMemoryEditorView: View {
 
     private var savedMemorySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Saved")
-                .font(.caption.weight(.black))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.7)
-                .padding(.leading, 4)
+            HStack {
+                Text("Saved")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+                    .padding(.leading, 4)
+                Spacer()
+                if !chatHistory.memories.isEmpty {
+                    Button("Delete all", role: .destructive) { confirmDeleteAll = true }
+                        .font(.caption.weight(.bold))
+                        .confirmationDialog(
+                            "Delete all \(chatHistory.memories.count) memories?",
+                            isPresented: $confirmDeleteAll,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete all memories", role: .destructive) { chatHistory.deleteAllMemories() }
+                        } message: {
+                            Text("The advisor will stop using them in future chats.")
+                        }
+                }
+            }
 
             if chatHistory.memories.isEmpty {
                 HStack(spacing: 12) {

@@ -82,11 +82,13 @@ export function isTutorRequest(latestMessage: string, hasAttachment = false): bo
   return TUTOR_KEYWORDS.test(latestMessage);
 }
 
+export function chatModel(): string {
+  return Deno.env.get("OPENAI_MODEL_CHAT") || Deno.env.get("OPENAI_MODEL") || "gpt-5.4-nano";
+}
+
 export function chooseModel(latestMessage: string, hasAttachment = false): { model: string; kind: "chat" | "tutor" } {
-  const base = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-nano";
-  const chatModel = Deno.env.get("OPENAI_MODEL_CHAT") || base;
   if (isTutorRequest(latestMessage, hasAttachment)) {
-    return { model: Deno.env.get("OPENAI_MODEL_TUTOR") || chatModel, kind: "tutor" };
+    return { model: Deno.env.get("OPENAI_MODEL_TUTOR") || chatModel(), kind: "tutor" };
   }
-  return { model: chatModel, kind: "chat" };
+  return { model: chatModel(), kind: "chat" };
 }

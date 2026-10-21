@@ -215,6 +215,9 @@ final class APIService {
         switch control.type {
         case "finish":
             return .finish(reason: control.reason ?? "stop")
+        case "memories":
+            let items = (control.items ?? []).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            return items.isEmpty ? nil : .memories(items)
         default:
             return nil
         }
@@ -223,6 +226,7 @@ final class APIService {
     private struct ChatStreamControl: Decodable {
         let type: String
         let reason: String?
+        let items: [String]?
     }
 
     private static func anonymousSupabaseFunctionHeaders() -> [String: String] {

@@ -120,16 +120,28 @@ final class ChatHistoryStore: ObservableObject {
         removed.forEach(syncDeleteMemory)
     }
 
+    func deleteAllMemories() {
+        let removed = memories.map(\.id)
+        memories.removeAll()
+        persistMemories()
+        removed.forEach(syncDeleteMemory)
+    }
+
     func deleteMemory(_ memory: ChatMemory) {
         memories.removeAll { $0.id == memory.id }
         persistMemories()
         syncDeleteMemory(memory.id)
     }
 
-    func captureMemory(from userMessage: String) {
-        for memory in inferredMemories(from: userMessage) {
-            addMemory(memory)
+    /// Saves one-sentence facts the chat function extracted from the student's message.
+    func addExtractedMemories(_ facts: [String]) {
+        for fact in facts.prefix(3) {
+            addMemory(String(fact.prefix(200)))
         }
+    }
+
+    /// Notes topics the student keeps coming back to across saved chats.
+    func captureRecurringTopic(from userMessage: String) {
         if let recurring = recurringTopicMemory(from: userMessage) {
             addMemory(recurring)
         }
@@ -328,35 +340,6 @@ final class ChatHistoryStore: ObservableObject {
     private func containsSimilarMemory(_ content: String) -> Bool {
         let normalized = content.lowercased()
         return memories.contains { $0.content.lowercased() == normalized }
-    }
-
-    private func inferredMemories(from text: String) -> [String] {
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lower = cleaned.lowercased()
-        var results: [String] = []
-
-        let explicitPrefixes = [
-            "remember that ",
-            "remember i ",
-            "please remember ",
-            "for future reference, ",
-            "keep in mind that ",
-        ]
-        for prefix in explicitPrefixes where lower.hasPrefix(prefix) {
-            results.append(cleaned)
-        }
-
-        if lower.hasPrefix("call me ") || lower.contains(" my preferred name is ") {
-            results.append(cleaned)
-        }
-        if lower.contains("i prefer ") || lower.contains("i like explanations") || lower.contains("i learn best") {
-            results.append(cleaned)
-        }
-        if lower.contains("i struggle with ") || lower.contains("i'm struggling with ") || lower.contains("i am struggling with ") {
-            results.append(cleaned)
-        }
-
-        return results
     }
 
     private func recurringTopicMemory(from text: String) -> String? {
