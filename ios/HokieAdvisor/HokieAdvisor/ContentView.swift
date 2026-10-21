@@ -2018,12 +2018,24 @@ struct ResourceLinkCard: View {
 struct GraphDiagramView: View {
     let content: String
 
-    private var graph: SimpleGraph {
-        SimpleGraph.parse(content)
-    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var stepIndex = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        if let graph = GraphLayoutCache.graph(for: content) {
+            diagram(graph)
+        } else {
+            // Unparseable or oversized block: show what the advisor wrote.
+            CodeBlockView(language: "graph", code: content)
+        }
+    }
+
+    private func diagram(_ graph: SimpleGraph) -> some View {
+        let steps = graph.steps
+        let current = steps.isEmpty ? nil : steps[min(stepIndex, steps.count - 1)]
+        let highlight = current?.highlight ?? graph.highlight
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.caption.bold())
@@ -2036,134 +2048,187 @@ struct GraphDiagramView: View {
             }
 
             GeometryReader { proxy in
-                graphCanvas(size: proxy.size)
+                canvas(graph, highlight: highlight, size: proxy.size)
             }
-            .frame(height: 210)
+            .frame(height: canvasHeight(graph))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: stepIndex)
+
+            if !steps.isEmpty {
+                stepControls(count: steps.count, caption: current?.caption)
+            }
         }
         .padding(14)
         .glassInset(cornerRadius: 16)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilitySummary(graph))
     }
 
-    private func graphCanvas(size: CGSize) -> some View {
-        let positions = graph.positions(in: size)
+    private func canvasHeight(_ graph: SimpleGraph) -> CGFloat {
+        graph.isTree ? min(max(CGFloat(graph.layerCount) * 70, 160), 340) : 230
+    }
+
+    private func canvas(_ graph: SimpleGraph, highlight: SimpleGraph.Highlight, size: CGSize) -> some View {
+        let widest = graph.nodes.map(nodeRadius).max() ?? 19
+        let positions = graph.positions(in: size, inset: widest + 6)
+        let currentNode = highlight.nodes.last
         return ZStack {
             ForEach(Array(graph.edges.enumerated()), id: \.offset) { _, edge in
                 if let a = positions[edge.from], let b = positions[edge.to] {
+                    let lit = graph.isHighlighted(edge, in: highlight)
+                    let tint = lit ? Color.vtBurgundy : Color.secondary.opacity(0.45)
+                    let end = trimmed(from: a, to: b, by: boundaryDistance(edge.to, from: a, to: b))
+                    let start = trimmed(from: b, to: a, by: boundaryDistance(edge.from, from: b, to: a))
+
                     Path { path in
-                        path.move(to: a)
-                        path.addLine(to: b)
+                        path.move(to: start)
+                        path.addLine(to: end)
                     }
-                    .stroke(
-                        graph.highlightedEdges.contains(edge.normalized)
-                            ? Color.vtBurgundy
-                            : Color.secondary.opacity(0.45),
-                        style: StrokeStyle(
-                            lineWidth: graph.highlightedEdges.contains(edge.normalized) ? 3 : 1.5,
-                            lineCap: .round
-                        )
-                    )
+                    .stroke(tint, style: StrokeStyle(lineWidth: lit ? 3 : 1.5, lineCap: .round))
+
+                    if edge.directed {
+                        arrowhead(at: end, from: start)
+                            .fill(tint)
+                    }
+
+                    if let weight = edge.weight {
+                        Text(weight)
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(lit ? Color.vtBurgundy : .secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(.regularMaterial, in: Capsule())
+                            .position(weightPosition(a, b))
+                    }
                 }
             }
 
             ForEach(graph.nodes, id: \.self) { node in
                 if let point = positions[node] {
-                    nodeView(node, highlighted: graph.highlightedNodes.contains(node))
+                    nodeView(node, highlighted: highlight.nodes.contains(node), isCurrent: node == currentNode && !graph.steps.isEmpty)
                         .position(point)
                 }
             }
         }
     }
 
-    private func nodeView(_ label: String, highlighted: Bool) -> some View {
+    private func stepControls(count: Int, caption: String?) -> some View {
+        let index = min(stepIndex, count - 1)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                stepButton("chevron.left", label: "Previous step", enabled: index > 0) { stepIndex = index - 1 }
+                Text("Step \(index + 1) of \(count)")
+                    .font(.caption.bold().monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                stepButton("chevron.right", label: "Next step", enabled: index < count - 1) { stepIndex = index + 1 }
+            }
+            if let caption {
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func stepButton(_ icon: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(enabled ? Color.vtBurgundy : Color.secondary.opacity(0.4))
+                .frame(width: 36, height: 36)
+                .glassCircle(strokeOpacity: 0.08)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(label)
+    }
+
+    private func nodeView(_ label: String, highlighted: Bool, isCurrent: Bool) -> some View {
         Text(label)
             .font(.caption.bold())
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
             .foregroundStyle(highlighted ? .white : .primary)
-            .frame(width: 38, height: 38)
-            .background(highlighted ? Color.vtBurgundy : Color.primary.opacity(0.08))
+            .padding(.horizontal, label.count > 3 ? 8 : 0)
+            .frame(maxWidth: 96)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: nodeRadius(label) * 2, height: 38)
+            .background(highlighted ? Color.vtBurgundy : Color.primary.opacity(0.08), in: Capsule())
             .overlay(
-                Circle().stroke(highlighted ? Color.vtBurgundy : Color.secondary.opacity(0.35), lineWidth: 1)
+                Capsule().stroke(
+                    isCurrent ? Color.vtOrange : (highlighted ? Color.vtBurgundy : Color.secondary.opacity(0.35)),
+                    lineWidth: isCurrent ? 2.5 : 1
+                )
             )
-            .clipShape(Circle())
             .shadow(color: highlighted ? Color.vtBurgundy.opacity(0.22) : .clear, radius: 8, y: 4)
+    }
+
+    /// Approximate half-width of a node capsule, so edges stop at its edge.
+    private func nodeRadius(_ label: String) -> CGFloat {
+        label.count > 3 ? min(CGFloat(label.count) * 3.6 + 8, 48) : 19
+    }
+
+    /// Distance from a node's center to its capsule edge along the a→b direction,
+    /// so edges meet wide labels at the side and the top/bottom alike.
+    private func boundaryDistance(_ label: String, from a: CGPoint, to b: CGPoint) -> CGFloat {
+        let halfWidth = nodeRadius(label), halfHeight: CGFloat = 19
+        let dx = abs(b.x - a.x), dy = abs(b.y - a.y)
+        let length = max(hypot(dx, dy), 0.001)
+        let cosine = dx / length, sine = dy / length
+        return min(cosine > 0.001 ? halfWidth / cosine : .infinity, sine > 0.001 ? halfHeight / sine : .infinity)
+    }
+
+    private func trimmed(from a: CGPoint, to b: CGPoint, by distance: CGFloat) -> CGPoint {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let length = max(hypot(dx, dy), 0.001)
+        let t = max(length - distance - 2, 0) / length
+        return CGPoint(x: a.x + dx * t, y: a.y + dy * t)
+    }
+
+    private func arrowhead(at tip: CGPoint, from tail: CGPoint) -> Path {
+        let angle = atan2(tip.y - tail.y, tip.x - tail.x)
+        let length: CGFloat = 10
+        let spread: CGFloat = .pi / 7
+        return Path { path in
+            path.move(to: tip)
+            path.addLine(to: CGPoint(x: tip.x - length * cos(angle - spread), y: tip.y - length * sin(angle - spread)))
+            path.addLine(to: CGPoint(x: tip.x - length * cos(angle + spread), y: tip.y - length * sin(angle + spread)))
+            path.closeSubpath()
+        }
+    }
+
+    /// Midpoint nudged off the line so the label does not sit on the stroke.
+    private func weightPosition(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+        let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        let dx = b.x - a.x, dy = b.y - a.y
+        let length = max(hypot(dx, dy), 0.001)
+        return CGPoint(x: mid.x - dy / length * 10, y: mid.y + dx / length * 10)
+    }
+
+    private func accessibilitySummary(_ graph: SimpleGraph) -> String {
+        let kind = graph.isDirected ? "Directed graph" : "Graph"
+        return "\(kind) with \(graph.nodes.count) nodes and \(graph.edges.count) edges"
     }
 }
 
-struct SimpleGraph {
-    struct Edge: Hashable {
-        let from: String
-        let to: String
+/// Parsed graphs keyed by block text. Streaming re-renders a message on every
+/// token, so parse and layout once per distinct block.
+@MainActor
+enum GraphLayoutCache {
+    private static var graphs: [String: SimpleGraph?] = [:]
 
-        var normalized: Edge {
-            from <= to ? self : Edge(from: to, to: from)
-        }
-    }
-
-    let nodes: [String]
-    let edges: [Edge]
-    let highlightedNodes: Set<String>
-    let highlightedEdges: Set<Edge>
-
-    static func parse(_ text: String) -> SimpleGraph {
-        var nodes = Set<String>()
-        var edges: [Edge] = []
-        var highlightedNodes = Set<String>()
-        var highlightedEdges = Set<Edge>()
-
-        for rawLine in text.components(separatedBy: .newlines) {
-            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
-
-            if line.lowercased().hasPrefix("highlight:") {
-                let values = line.dropFirst("highlight:".count)
-                    .split { $0 == "," || $0 == " " || $0 == ">" || $0 == "-" }
-                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                highlightedNodes.formUnion(values)
-                for pair in zip(values, values.dropFirst()) {
-                    highlightedEdges.insert(Edge(from: pair.0, to: pair.1).normalized)
-                }
-                continue
-            }
-
-            let separators = ["--", "->", "-"]
-            if let separator = separators.first(where: { line.contains($0) }) {
-                let parts = line.components(separatedBy: separator)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                guard parts.count >= 2 else { continue }
-                for pair in zip(parts, parts.dropFirst()) {
-                    nodes.insert(pair.0)
-                    nodes.insert(pair.1)
-                    edges.append(Edge(from: pair.0, to: pair.1))
-                }
-            } else {
-                nodes.insert(line)
-            }
-        }
-
-        let orderedNodes = Array(nodes).sorted()
-        return SimpleGraph(
-            nodes: orderedNodes,
-            edges: edges,
-            highlightedNodes: highlightedNodes,
-            highlightedEdges: highlightedEdges
-        )
-    }
-
-    func positions(in size: CGSize) -> [String: CGPoint] {
-        guard !nodes.isEmpty else { return [:] }
-        let radius = max(58, min(size.width, size.height) * 0.36)
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        return Dictionary(uniqueKeysWithValues: nodes.enumerated().map { index, node in
-            let angle = (Double(index) / Double(nodes.count)) * 2 * Double.pi - Double.pi / 2
-            return (
-                node,
-                CGPoint(
-                    x: center.x + CGFloat(cos(angle)) * radius,
-                    y: center.y + CGFloat(sin(angle)) * radius
-                )
-            )
-        })
+    static func graph(for content: String) -> SimpleGraph? {
+        if let cached = graphs[content] { return cached }
+        if graphs.count > 64 { graphs.removeAll() }
+        let parsed = SimpleGraph.parse(content)
+        graphs[content] = .some(parsed)
+        return parsed
     }
 }
 

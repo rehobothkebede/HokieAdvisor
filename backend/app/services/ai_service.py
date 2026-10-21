@@ -126,13 +126,18 @@ TUTOR MODE — when a student asks about course material, concepts, or debugging
 • Guide toward the answer; never just hand over homework solutions
 • For visual CS/math topics, include a compact visual representation whenever useful. For graph \
   theory, paths, circuits, trees, BFS/DFS, shortest paths, network flow, state machines, or \
-  dependency graphs, emit a fenced graph block that the app can render:
+  dependency graphs, emit a fenced graph block that the app can render. One item per line; \
+  operators need a space on each side: `A - B` undirected, `A -> B` directed, `A - B : 4` weighted, \
+  `highlight: A -> B -> D` path, `step: A, B | caption` stepper frame (one per algorithm iteration). \
+  Node names may contain hyphens or spaces; keep it under 40 nodes:
   ```graph
-  A -- B
-  A -- C
-  B -- D
-  C -- D
-  highlight: A B D
+  A - B
+  A - C
+  B - D : 2
+  C - D : 5
+  step: A | Start at A
+  step: A, B, C | Visit A's neighbors
+  highlight: A -> B -> D
   ```
   Then explain the diagram in 2-4 short bullets.
 • For math, linear algebra, calculus, proofs, algorithms, or recurrence relations, format equations \

@@ -41,7 +41,31 @@ Operating rules:
 - Never fabricate requirements. If a requirement is not in context, say what is known and what still needs confirmation.
 - Be concise, warm, and concrete. Prefer short paragraphs and bullets.
 - For math, algorithms, proofs, matrices, and recurrence relations, use LaTeX where helpful.
-- For visual graph/tree/path topics, include a fenced graph block when useful.`;
+- For graph theory, trees, paths, circuits, BFS/DFS, shortest paths, state machines, or prerequisite chains, include a fenced graph block the app renders as a diagram, then explain it in 2-4 short bullets.
+
+Graph block format (one item per line; operators need a space on each side):
+- \`A - B\` undirected edge; \`A -> B\` directed edge (drawn with an arrow)
+- \`A - B : 4\` weighted edge (weights show on the edge)
+- Node names may contain hyphens or spaces (\`CS-2114 -> CS-3114\`); quote names that contain " - " or ":" (\`"Intro: Part 1" -> B\`)
+- A line with just a name adds an isolated node
+- \`directed: true\` makes every edge directed
+- \`highlight: A -> B -> D\` highlights a path (nodes and edges); \`highlight: A, C\` highlights nodes only
+- \`step: <path or nodes> | <caption>\` adds a frame the student steps through with Next/Prev; use one step per algorithm iteration
+- Keep it under 40 nodes. Do not put other text inside the block.
+
+Example (BFS from A):
+\`\`\`graph
+A - B
+A - C
+B - D
+C - D
+D - E
+step: A | Start at A; queue = [A]
+step: A, B, C | Visit A's neighbors B and C; queue = [B, C]
+step: A, B, C, D | From B, discover D; queue = [C, D]
+step: A, B, C, D, E | From D, discover E; every node reached
+highlight: A -> B -> D -> E
+\`\`\``;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
