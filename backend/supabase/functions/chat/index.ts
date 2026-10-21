@@ -1,16 +1,9 @@
 import { requireUser } from "../_shared/auth.ts";
+import { buildAcademicContext, type TranscriptEntry } from "./context.ts";
 
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
-};
-
-type TranscriptEntry = {
-  code: string;
-  name?: string;
-  grade?: string | null;
-  semester?: string | null;
-  credits?: number | null;
 };
 
 type ChatRequest = {
@@ -32,15 +25,22 @@ const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 8000;
 const DEFAULT_DAILY_LIMIT = 60;
 
+// Institution-specific rules. When migration 005 is live this comes from
+// institutions.prompt_context for the student's institution.
+const VT_PROMPT_CONTEXT = `Institution: Virginia Tech.
+- C or better means C, C+, B-, B, B+, A-, A, or A+. C- does not satisfy C-or-better requirements.
+- Treat transfer/awarded credit grades such as T, TR, TRANSFER, P, CR, or CREDIT as satisfying exact mapped VT course codes.
+- The official DARS audit is the source of truth when it disagrees with the Hokie Advisor audit.`;
+
 const systemPrompt = `You are Hokie Advisor, a personalized academic advisor and CS/math tutor for Virginia Tech students.
 
 Operating rules:
 - If the student asks about degree planning, scheduling, prerequisites, grades, transcripts, or audits, answer as an academic advisor.
 - If the student asks about course material, programming, math, proofs, algorithms, or debugging, answer as a tutor.
-- Use the student's transcript context when provided. Do not ask them to check their transcript if the answer is available in context.
+- Use the student's transcript, audit, and requirement context when provided. Do not ask them to check their transcript or audit if the answer is available in context.
+- For "what do I still need to graduate?", combine the program requirements, the latest audits, and the transcript; list what remains and note anything that needs an advisor's confirmation.
+- For course recommendations, only suggest courses whose prerequisites the student has met (or is completing this term), and say which requirement each one fills.
 - For transcript rulings, answer yes/no first, then explain the specific courses and grades.
-- C or better means C, C+, B-, B, B+, A-, A, or A+. C- does not satisfy C-or-better requirements.
-- Treat transfer/awarded credit grades such as T, TR, TRANSFER, P, CR, or CREDIT as satisfying exact mapped VT course codes.
 - Never fabricate requirements. If a requirement is not in context, say what is known and what still needs confirmation.
 - Be concise, warm, and concrete. Prefer short paragraphs and bullets.
 - For math, algorithms, proofs, matrices, and recurrence relations, use LaTeX where helpful.
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
   }
 
   const openAIModel = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-nano";
-  const prompt = await buildPrompt(body);
+  const prompt = await buildPrompt(body, auth.user.id, conversation[conversation.length - 1].content);
   const messages = [
     { role: "system", content: prompt },
     ...conversation,
@@ -144,27 +144,25 @@ Deno.serve(async (req) => {
   }
 });
 
-async function buildPrompt(body: ChatRequest): Promise<string> {
-  const parts = [systemPrompt];
+async function buildPrompt(body: ChatRequest, userId: string, latestMessage: string): Promise<string> {
+  const academic = await buildAcademicContext({
+    userId,
+    clientMajor: body.major || "Computer Science",
+    transcript: Array.isArray(body.transcript) ? body.transcript : [],
+    inProgressCourses: Array.isArray(body.in_progress_courses) ? body.in_progress_courses.map(String) : [],
+    latestMessage,
+  });
+
+  const parts = [systemPrompt, VT_PROMPT_CONTEXT, ...academic.sections];
   const studentContext = buildStudentContext(body);
   if (studentContext) {
     parts.push(studentContext);
   }
-
-  const courseContext = await buildCourseContext(body.major || "Computer Science");
-  if (courseContext) {
-    parts.push(`Department course catalog context:\n${courseContext}`);
-  }
-
   return parts.join("\n\n");
 }
 
 function buildStudentContext(body: ChatRequest): string {
   const lines: string[] = [];
-
-  if (body.major) {
-    lines.push(`Student major: ${body.major}`);
-  }
 
   if (body.transcript?.length) {
     lines.push("Transcript courses:");
@@ -201,50 +199,6 @@ function buildStudentContext(body: ChatRequest): string {
   }
 
   return lines.join("\n");
-}
-
-async function buildCourseContext(major: string): Promise<string> {
-  const subject = subjectForMajor(major);
-  if (!subject) {
-    return "";
-  }
-
-  const supabaseURL = Deno.env.get("SUPABASE_URL");
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
-  if (!supabaseURL || !supabaseKey) {
-    return "";
-  }
-
-  const url = new URL(`${supabaseURL}/rest/v1/coe_courses`);
-  url.searchParams.set("select", "code,name,credits,prerequisites,description");
-  url.searchParams.set("subject", `eq.${subject}`);
-  url.searchParams.set("order", "code.asc");
-  url.searchParams.set("limit", "80");
-
-  const response = await fetch(url, {
-    headers: {
-      "apikey": supabaseKey,
-      "Authorization": `Bearer ${supabaseKey}`,
-    },
-  });
-  if (!response.ok) {
-    return "";
-  }
-
-  const courses = await response.json();
-  return courses.map((course: Record<string, unknown>) => {
-    const prereqs = course.prerequisites ? `; prereqs: ${course.prerequisites}` : "";
-    const description = course.description ? `; ${String(course.description).slice(0, 220)}` : "";
-    return `- ${course.code}: ${course.name} (${course.credits ?? "?"} credits${prereqs})${description}`;
-  }).join("\n");
-}
-
-function subjectForMajor(major: string): string {
-  const normalized = major.trim().toLowerCase();
-  if (["computer science", "cs"].includes(normalized)) {
-    return "CS";
-  }
-  return "";
 }
 
 // Only user/assistant turns are accepted from the client; system and tool roles
