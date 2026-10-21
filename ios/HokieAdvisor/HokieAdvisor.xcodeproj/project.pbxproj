@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CE5A7D012F90000000386AFD /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = CE5A7D032F90000000386AFD /* SwiftMath */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		CE809A4D2F8031CA00386AFD /* HokieAdvisor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HokieAdvisor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CE5A7D012F90000000386AFD /* SwiftMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = HokieAdvisor;
 			packageProductDependencies = (
+				CE5A7D032F90000000386AFD /* SwiftMath */,
 			);
 			productName = HokieAdvisor;
 			productReference = CE809A4D2F8031CA00386AFD /* HokieAdvisor.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = CE809A442F8031CA00386AFD;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CE5A7D022F90000000386AFD /* XCRemoteSwiftPackageReference "SwiftMath" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CE809A4E2F8031CA00386AFD /* Products */;
 			projectDirPath = "";
@@ -326,6 +335,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CE5A7D022F90000000386AFD /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.7.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CE5A7D032F90000000386AFD /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CE5A7D022F90000000386AFD /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CE809A452F8031CA00386AFD /* Project object */;
 }

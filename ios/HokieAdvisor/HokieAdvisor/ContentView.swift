@@ -1774,6 +1774,8 @@ struct MarkdownBody: View {
     var baseFont: Font = .subheadline
     var baseColor: Color = .primary
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private enum Block {
         case heading(Int, String)
         case bullet(String)
@@ -1830,7 +1832,7 @@ struct MarkdownBody: View {
                 continue
             }
 
-            if let environment = LaTeXFormatter.startedMathEnvironment(t) {
+            if LaTeXFormatter.hasBareEnvironment(t), let environment = LaTeXFormatter.startedMathEnvironment(t) {
                 if !pending.isEmpty { result.append(.paragraph(pending)); pending = "" }
                 inMath = true
                 mathEndEnvironment = environment
@@ -1866,7 +1868,7 @@ struct MarkdownBody: View {
                 continue
             }
 
-            if LaTeXFormatter.looksLikeDisplayMath(t) {
+            if LaTeXFormatter.hasBareEnvironment(t), LaTeXFormatter.looksLikeDisplayMath(t) {
                 if !pending.isEmpty { result.append(.paragraph(pending)); pending = "" }
                 result.append(.math(t))
                 continue
@@ -1918,27 +1920,27 @@ struct MarkdownBody: View {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .heading(let level, let content):
-                    Text(LaTeXFormatter.inline(content).markdown)
+                    inline(content, font: level == 1 ? .headline : .subheadline)
                         .font(level == 1 ? .headline : .subheadline).fontWeight(.semibold)
                         .foregroundStyle(baseColor).padding(.top, level <= 2 ? 6 : 2)
                 case .bullet(let content):
                     HStack(alignment: .top, spacing: 6) {
                         Text("•").font(baseFont).foregroundStyle(baseColor.opacity(0.6))
-                        Text(LaTeXFormatter.inline(content).markdown).font(baseFont).foregroundStyle(baseColor)
+                        inline(content, font: baseFont).font(baseFont).foregroundStyle(baseColor)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 case .numbered(let number, let content):
                     HStack(alignment: .top, spacing: 6) {
                         Text("\(number).").font(baseFont).foregroundStyle(baseColor.opacity(0.6))
                             .frame(minWidth: 20, alignment: .trailing)
-                        Text(LaTeXFormatter.inline(content).markdown).font(baseFont).foregroundStyle(baseColor)
+                        inline(content, font: baseFont).font(baseFont).foregroundStyle(baseColor)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 case .paragraph(let content):
-                    Text(LaTeXFormatter.inline(content).markdown).font(baseFont).foregroundStyle(baseColor)
+                    inline(content, font: baseFont).font(baseFont).foregroundStyle(baseColor)
                         .fixedSize(horizontal: false, vertical: true)
                 case .math(let content):
-                    LaTeXMathView(content: content)
+                    MathDisplayView(latex: content)
                         .padding(.vertical, 4)
                 case .code(let lang, let content):
                     CodeBlockView(language: lang, code: content)
@@ -1952,6 +1954,14 @@ struct MarkdownBody: View {
                 }
             }
         }
+    }
+
+    private func inline(_ content: String, font: Font) -> Text {
+        MathText.text(
+            content,
+            textStyle: UIFont.TextStyle(font),
+            color: UIColor(baseColor).resolved(for: colorScheme)
+        )
     }
 
     private static func youtubeResource(from line: String) -> (title: String, url: URL)? {
@@ -2229,339 +2239,6 @@ enum GraphLayoutCache {
         let parsed = SimpleGraph.parse(content)
         graphs[content] = .some(parsed)
         return parsed
-    }
-}
-
-struct LaTeXMathView: View {
-    let content: String
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Group {
-                if let matrix = LaTeXFormatter.matrix(from: content) {
-                    matrixView(matrix)
-                } else if let cases = LaTeXFormatter.cases(from: content) {
-                    casesView(cases)
-                } else {
-                    Text(LaTeXFormatter.display(content))
-                        .font(.system(.body, design: .serif))
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-        }
-        .glassInset(cornerRadius: 14)
-    }
-
-    private func matrixView(_ matrix: LaTeXFormatter.Matrix) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(matrix.leftBracket)
-                .font(.system(size: CGFloat(max(34, matrix.rows.count * 20)), weight: .light, design: .serif))
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .center, spacing: 8) {
-                ForEach(Array(matrix.rows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 18) {
-                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                            if cell == LaTeXFormatter.dividerCell {
-                                Rectangle()
-                                    .fill(Color.secondary.opacity(0.6))
-                                    .frame(width: 1, height: 24)
-                                    .padding(.horizontal, 2)
-                            } else {
-                                Text(LaTeXFormatter.display(cell))
-                                    .font(.system(.body, design: .serif))
-                                    .frame(minWidth: 24, alignment: .center)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Text(matrix.rightBracket)
-                .font(.system(size: CGFloat(max(34, matrix.rows.count * 20)), weight: .light, design: .serif))
-                .foregroundStyle(.secondary)
-        }
-        .textSelection(.enabled)
-    }
-
-    private func casesView(_ cases: LaTeXFormatter.Cases) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text("{")
-                .font(.system(size: CGFloat(max(46, cases.rows.count * 24)), weight: .light, design: .serif))
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(cases.rows.enumerated()), id: \.offset) { _, row in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(LaTeXFormatter.display(row.expression))
-                            .font(.system(.body, design: .serif))
-                        if let condition = row.condition {
-                            Text(LaTeXFormatter.display(condition))
-                                .font(.system(.body, design: .serif))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-        .textSelection(.enabled)
-    }
-}
-
-enum LaTeXFormatter {
-    static let dividerCell = "__HA_MATRIX_DIVIDER__"
-
-    struct Matrix {
-        let rows: [[String]]
-        let leftBracket: String
-        let rightBracket: String
-    }
-
-    struct Cases {
-        struct Row {
-            let expression: String
-            let condition: String?
-        }
-
-        let rows: [Row]
-    }
-
-    static func inline(_ text: String) -> String {
-        var output = ""
-        var index = text.startIndex
-
-        while index < text.endIndex {
-            if text[index] == "$", let end = text[text.index(after: index)...].firstIndex(of: "$") {
-                let math = String(text[text.index(after: index)..<end])
-                output += display(math)
-                index = text.index(after: end)
-            } else if text[index...].hasPrefix("\\("),
-                      let range = text[index...].range(of: "\\)") {
-                let start = text.index(index, offsetBy: 2)
-                let math = String(text[start..<range.lowerBound])
-                output += display(math)
-                index = range.upperBound
-            } else {
-                output.append(text[index])
-                index = text.index(after: index)
-            }
-        }
-
-        return output
-    }
-
-    static func display(_ latex: String) -> String {
-        var value = repairMalformedMathSyntax(normalizeEscapes(latex))
-            .replacingOccurrences(of: "\\left", with: "")
-            .replacingOccurrences(of: "\\right", with: "")
-            .replacingOccurrences(of: "\\,", with: " ")
-            .replacingOccurrences(of: "\\;", with: " ")
-            .replacingOccurrences(of: "\\quad", with: " ")
-            .replacingOccurrences(of: "\\cdot", with: "·")
-            .replacingOccurrences(of: "\\times", with: "×")
-            .replacingOccurrences(of: "\\div", with: "÷")
-            .replacingOccurrences(of: "\\leq", with: "≤")
-            .replacingOccurrences(of: "\\geq", with: "≥")
-            .replacingOccurrences(of: "\\neq", with: "≠")
-            .replacingOccurrences(of: "\\approx", with: "≈")
-            .replacingOccurrences(of: "\\rightarrow", with: "→")
-            .replacingOccurrences(of: "\\to", with: "→")
-            .replacingOccurrences(of: "\\infty", with: "∞")
-            .replacingOccurrences(of: "\\pi", with: "π")
-            .replacingOccurrences(of: "\\theta", with: "θ")
-            .replacingOccurrences(of: "\\lambda", with: "λ")
-            .replacingOccurrences(of: "\\mu", with: "μ")
-            .replacingOccurrences(of: "\\sigma", with: "σ")
-            .replacingOccurrences(of: "\\alpha", with: "α")
-            .replacingOccurrences(of: "\\beta", with: "β")
-            .replacingOccurrences(of: "\\gamma", with: "γ")
-            .replacingOccurrences(of: "\\Delta", with: "Δ")
-            .replacingOccurrences(of: "\\nabla", with: "∇")
-
-        value = replaceFractions(in: value)
-        value = value
-            .replacingOccurrences(of: #"\\begin\{[^}]+\}(\{[^}]*\})?"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\\end\{[^}]+\}"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\\\", with: "\n")
-            .replacingOccurrences(of: "&", with: "  ")
-            .replacingOccurrences(of: "{", with: "")
-            .replacingOccurrences(of: "}", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return value
-    }
-
-    static func looksLikeDisplayMath(_ latex: String) -> Bool {
-        let normalized = repairMalformedMathSyntax(normalizeEscapes(latex))
-        return normalized.contains("\\begin{") &&
-            (normalized.contains("matrix}") || normalized.contains("array}") || normalized.contains("cases}"))
-    }
-
-    static func startedMathEnvironment(_ latex: String) -> String? {
-        let normalized = repairMalformedMathSyntax(normalizeEscapes(latex))
-        guard let range = normalized.range(
-            of: #"\\begin\{(bmatrix|pmatrix|vmatrix|matrix|array|cases|case)\}"#,
-            options: .regularExpression
-        ) else {
-            return nil
-        }
-        let command = String(normalized[range])
-        return command
-            .replacingOccurrences(of: "\\begin{", with: "")
-            .replacingOccurrences(of: "}", with: "")
-    }
-
-    static func endsMathEnvironment(_ latex: String, environment: String) -> Bool {
-        let normalized = repairMalformedMathSyntax(normalizeEscapes(latex))
-        return normalized.contains("\\end{\(environment)}")
-    }
-
-    static func matrix(from latex: String) -> Matrix? {
-        let normalized = repairMalformedMathSyntax(normalizeEscapes(latex))
-            .replacingOccurrences(of: "\\[", with: "")
-            .replacingOccurrences(of: "\\]", with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let beginRange = normalized.range(of: #"\\begin\{([bpv]?matrix|array)\}(\{[^}]*\})?"#, options: .regularExpression),
-              let endRange = normalized.range(of: #"\\end\{([bpv]?matrix|array)\}"#, options: .regularExpression) else {
-            return nil
-        }
-
-        let beginCommand = String(normalized[beginRange])
-        let inner = String(normalized[beginRange.upperBound..<endRange.lowerBound])
-        let rowSegments = inner.contains("\\\\")
-            ? inner.components(separatedBy: "\\\\")
-            : inner.components(separatedBy: .newlines)
-        let dividerIndex = dividerColumnIndex(for: beginCommand)
-        let rows = rowSegments
-            .map { row in
-                parseMatrixRow(String(row), dividerIndex: dividerIndex)
-            }
-            .filter { !$0.isEmpty }
-
-        guard !rows.isEmpty else { return nil }
-        let brackets = bracketsForEnvironment(beginCommand)
-        return Matrix(rows: rows, leftBracket: brackets.left, rightBracket: brackets.right)
-    }
-
-    static func cases(from latex: String) -> Cases? {
-        let normalized = repairMalformedMathSyntax(normalizeEscapes(latex))
-            .replacingOccurrences(of: "\\[", with: "")
-            .replacingOccurrences(of: "\\]", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let beginRange = normalized.range(of: #"\\begin\{cases?\}"#, options: .regularExpression),
-              let endRange = normalized.range(of: #"\\end\{cases?\}"#, options: .regularExpression) else {
-            return nil
-        }
-
-        let inner = String(normalized[beginRange.upperBound..<endRange.lowerBound])
-        let rowSegments = inner.contains("\\\\")
-            ? inner.components(separatedBy: "\\\\")
-            : inner.components(separatedBy: .newlines)
-
-        let rows = rowSegments
-            .flatMap { row -> [Cases.Row] in
-                let cells = row.split(separator: "&", omittingEmptySubsequences: false)
-                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                guard let expression = cells.first else { return [] }
-                let condition = cells.count > 1 ? cells.dropFirst().joined(separator: "  ") : nil
-                return [Cases.Row(expression: expression, condition: condition)]
-            }
-
-        guard !rows.isEmpty else { return nil }
-        return Cases(rows: rows)
-    }
-
-    private static func replaceFractions(in input: String) -> String {
-        var value = input
-        let pattern = #"\\frac\{([^{}]+)\}\{([^{}]+)\}"#
-        while let range = value.range(of: pattern, options: .regularExpression) {
-            let match = String(value[range])
-            let parts = match.replacingOccurrences(of: "\\frac{", with: "")
-                .dropLast()
-                .components(separatedBy: "}{")
-            guard parts.count == 2 else { break }
-            value.replaceSubrange(range, with: "(\(parts[0]))/(\(parts[1]))")
-        }
-        return value
-    }
-
-    private static func parseMatrixRow(_ row: String, dividerIndex: Int? = nil) -> [String] {
-        let cells = row.split(separator: "&", omittingEmptySubsequences: false)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-
-        var parsed: [String] = []
-        for (index, cell) in cells.enumerated() {
-            if let dividerIndex, index == dividerIndex {
-                parsed.append(dividerCell)
-            }
-            if cell == "|" {
-                parsed.append(dividerCell)
-            } else if !cell.isEmpty {
-                parsed.append(cell)
-            }
-        }
-        return parsed
-    }
-
-    private static func dividerColumnIndex(for command: String) -> Int? {
-        guard let specRange = command.range(of: #"\{[clr|]+\}"#, options: .regularExpression) else {
-            return nil
-        }
-        let spec = command[specRange].filter { $0 != "{" && $0 != "}" }
-        guard let divider = spec.firstIndex(of: "|") else { return nil }
-        return spec[..<divider].filter { $0 == "c" || $0 == "l" || $0 == "r" }.count
-    }
-
-    private static func bracketsForEnvironment(_ command: String) -> (left: String, right: String) {
-        if command.contains("pmatrix") { return ("(", ")") }
-        if command.contains("vmatrix") { return ("|", "|") }
-        return ("[", "]")
-    }
-
-    private static func normalizeEscapes(_ latex: String) -> String {
-        latex
-            .replacingOccurrences(of: "\\\\[", with: "\\[")
-            .replacingOccurrences(of: "\\\\]", with: "\\]")
-            .replacingOccurrences(of: "\\\\begin", with: "\\begin")
-            .replacingOccurrences(of: "\\\\end", with: "\\end")
-    }
-
-    private static func repairMalformedMathSyntax(_ latex: String) -> String {
-        var value = latex
-
-        for environment in ["array", "bmatrix", "pmatrix", "vmatrix", "matrix", "cases", "case"] {
-            value = value.replacingOccurrences(of: "\\end\(environment)", with: "\\end{\(environment)}")
-        }
-
-        let braceEnvironments = ["bmatrix", "pmatrix", "vmatrix", "matrix", "cases", "case"]
-        for environment in braceEnvironments {
-            let malformed = "\\begin\(environment)"
-            while let range = value.range(of: malformed) {
-                value.replaceSubrange(range, with: "\\begin{\(environment)}")
-            }
-        }
-
-        while let range = value.range(of: "\\beginarray") {
-            var cursor = range.upperBound
-            var columnSpec = ""
-            let allowedSpecCharacters = Set("clr|")
-
-            while cursor < value.endIndex, allowedSpecCharacters.contains(value[cursor]) {
-                columnSpec.append(value[cursor])
-                cursor = value.index(after: cursor)
-            }
-
-            let replacement = columnSpec.isEmpty ? "\\begin{array}" : "\\begin{array}{\(columnSpec)}"
-            value.replaceSubrange(range.lowerBound..<cursor, with: replacement)
-        }
-
-        return value
     }
 }
 
