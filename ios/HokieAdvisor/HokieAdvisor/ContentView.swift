@@ -28,37 +28,25 @@ enum HokieChrome {
 }
 
 // MARK: - Glass Surfaces
+//
+// Surfaces are flat Agora ivory/navy cards with a hairline stroke and a soft
+// shadow. The `glass*` modifier names are kept so call sites stay unchanged.
 
 private enum HokieGlassPalette {
     static func surfaceFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(red: 0.118, green: 0.112, blue: 0.116).opacity(0.76)
-            : Color.white.opacity(0.54)
+        AgoraPalette.surface.opacity(colorScheme == .dark ? 0.94 : 0.92)
     }
 
     static func insetFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(red: 0.152, green: 0.146, blue: 0.151).opacity(0.70)
-            : Color.white.opacity(0.42)
-    }
-
-    static func sheen(for colorScheme: ColorScheme) -> Color {
-        Color.white.opacity(colorScheme == .dark ? 0.075 : 0.30)
-    }
-
-    static func shade(for colorScheme: ColorScheme) -> Color {
-        Color.black.opacity(colorScheme == .dark ? 0.10 : 0.018)
+        AgoraPalette.surfaceInset.opacity(colorScheme == .dark ? 0.80 : 0.70)
     }
 
     static func shadow(for colorScheme: ColorScheme) -> Color {
-        Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08)
+        Color.black.opacity(colorScheme == .dark ? 0.24 : 0.06)
     }
 
     static func stroke(opacity: Double, for colorScheme: ColorScheme) -> Color {
-        if colorScheme == .dark {
-            return Color.white.opacity(max(opacity, 0.12))
-        }
-        return Color.black.opacity(max(opacity * 0.65, 0.055))
+        AgoraPalette.stroke.opacity(min(1, 0.55 + opacity * 4))
     }
 }
 
@@ -76,25 +64,13 @@ private struct HokieGlassRoundedBackground: View {
         shape
             .fill(inset ? HokieGlassPalette.insetFill(for: colorScheme) : HokieGlassPalette.surfaceFill(for: colorScheme))
             .overlay {
-                LinearGradient(
-                    colors: [
-                        HokieGlassPalette.sheen(for: colorScheme),
-                        Color.white.opacity(0.02),
-                        HokieGlassPalette.shade(for: colorScheme),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(shape)
-            }
-            .overlay {
                 shape.stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 1)
             }
             .shadow(
                 color: elevated ? HokieGlassPalette.shadow(for: colorScheme) : .clear,
-                radius: elevated ? 14 : 0,
+                radius: elevated ? 10 : 0,
                 x: 0,
-                y: elevated ? 8 : 0
+                y: elevated ? 4 : 0
             )
     }
 }
@@ -109,25 +85,13 @@ private struct HokieGlassCapsuleBackground: View {
         Capsule()
             .fill(HokieGlassPalette.surfaceFill(for: colorScheme))
             .overlay {
-                LinearGradient(
-                    colors: [
-                        HokieGlassPalette.sheen(for: colorScheme),
-                        Color.white.opacity(0.015),
-                        HokieGlassPalette.shade(for: colorScheme),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(Capsule())
-            }
-            .overlay {
                 Capsule().stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 1)
             }
             .shadow(
                 color: elevated ? HokieGlassPalette.shadow(for: colorScheme) : .clear,
-                radius: elevated ? 14 : 0,
+                radius: elevated ? 10 : 0,
                 x: 0,
-                y: elevated ? 8 : 0
+                y: elevated ? 4 : 0
             )
     }
 }
@@ -142,25 +106,13 @@ private struct HokieGlassCircleBackground: View {
         Circle()
             .fill(HokieGlassPalette.surfaceFill(for: colorScheme))
             .overlay {
-                LinearGradient(
-                    colors: [
-                        HokieGlassPalette.sheen(for: colorScheme),
-                        Color.white.opacity(0.015),
-                        HokieGlassPalette.shade(for: colorScheme),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(Circle())
-            }
-            .overlay {
                 Circle().stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 1)
             }
             .shadow(
                 color: elevated ? HokieGlassPalette.shadow(for: colorScheme) : .clear,
-                radius: elevated ? 14 : 0,
+                radius: elevated ? 10 : 0,
                 x: 0,
-                y: elevated ? 8 : 0
+                y: elevated ? 4 : 0
             )
     }
 }
@@ -286,16 +238,9 @@ struct HokiePageHeader<Trailing: View>: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(spacing: 9) {
                 HokieSignalMark(symbol: symbol, accent: accent)
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [accent.opacity(0.85), Color.vtOrange.opacity(0.72)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 3, height: 42)
-                    .clipShape(Capsule())
+                Capsule()
+                    .fill(accent.opacity(0.75))
+                    .frame(width: 2, height: 40)
                     .accessibilityHidden(true)
             }
             .padding(.top, 2)
@@ -304,18 +249,18 @@ struct HokiePageHeader<Trailing: View>: View {
                 HStack(alignment: .center, spacing: 10) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(eyebrow.uppercased())
-                            .font(.system(size: 10, weight: .black, design: .monospaced))
-                            .tracking(1.4)
+                            .font(.agoraEyebrow)
+                            .tracking(1.6)
                             .foregroundStyle(accent)
 
                         Text(title)
-                            .font(.system(size: 36, weight: .black, design: .rounded))
-                            .foregroundStyle(.primary)
+                            .font(.agoraDisplay(34))
+                            .foregroundStyle(AgoraPalette.brandInk)
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
 
                         Text(subtitle)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -332,19 +277,19 @@ struct HokiePageHeader<Trailing: View>: View {
                     if let stat {
                         HStack(spacing: 7) {
                             Image(systemName: stat.icon)
-                                .font(.caption.weight(.bold))
+                                .font(.caption.weight(.semibold))
                             Text(stat.value)
-                                .font(.caption.weight(.black))
+                                .font(.caption.weight(.bold))
                             Text(stat.label)
-                                .font(.caption2.weight(.semibold))
+                                .font(.caption2.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 7)
-                        .background(Color.primary.opacity(0.08), in: Capsule())
-                        .overlay(Capsule().stroke(accent.opacity(0.18), lineWidth: 1))
+                        .background(AgoraPalette.surfaceInset, in: Capsule())
+                        .overlay(Capsule().stroke(AgoraPalette.stroke, lineWidth: 1))
                     }
                 }
             }
@@ -373,48 +318,31 @@ extension HokiePageHeader where Trailing == EmptyView {
     }
 }
 
+/// Header emblem: always Agora navy/ivory so the platform identity stays fixed;
+/// the accent only marks the bottom edge.
 struct HokieSignalMark: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     let symbol: String
     let accent: Color
 
     var body: some View {
-        let markShape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let markShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
         ZStack {
             markShape
-                .fill(HokieGlassPalette.insetFill(for: colorScheme))
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            Color.vtBurgundy.opacity(0.62),
-                            accent.opacity(0.36),
-                            Color.white.opacity(0.06),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .clipShape(markShape)
-                }
-                .overlay(
-                    markShape
-                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
-                )
-                .overlay(alignment: .topLeading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.20))
-                        .frame(width: 22, height: 2)
-                        .padding(9)
+                .fill(AgoraPalette.brandInk)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(accent)
+                        .frame(height: 3)
+                        .clipShape(markShape)
                 }
 
             Image(systemName: symbol)
-                .font(.system(size: 21, weight: .black))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.16), radius: 5, x: 0, y: 3)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(AgoraPalette.background)
         }
-        .frame(width: 54, height: 48)
-        .shadow(color: accent.opacity(0.14), radius: 12, x: 0, y: 7)
+        .frame(width: 52, height: 48)
+        .clipShape(markShape)
         .accessibilityHidden(true)
     }
 }
@@ -424,20 +352,23 @@ struct HokieSignalTrack: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Capsule().fill(Color.vtBurgundy.opacity(0.78)).frame(width: 38)
-            Capsule().fill(accent.opacity(0.74)).frame(width: 20)
-            Capsule().fill(Color.hokieStone.opacity(0.48)).frame(width: 12)
-            Capsule().fill(Color.primary.opacity(0.10)).frame(maxWidth: .infinity)
+            Capsule().fill(AgoraPalette.brandInk.opacity(0.82)).frame(width: 38)
+            Capsule().fill(accent.opacity(0.80)).frame(width: 20)
+            Capsule().fill(AgoraPalette.copper.opacity(0.70)).frame(width: 12)
+            Capsule().fill(AgoraPalette.stroke).frame(maxWidth: .infinity)
         }
-        .frame(height: 5)
+        .frame(height: 4)
         .accessibilityHidden(true)
     }
 }
 
 struct HokieSegmentedControl<Selection: Hashable>: View {
+    @Environment(\.schoolTheme) private var theme
+
     @Binding var selection: Selection
     let options: [(value: Selection, title: String)]
-    var accent: Color = .vtBurgundy
+    /// Overrides the school accent for the selected segment.
+    var accent: Color? = nil
 
     var body: some View {
         HStack(spacing: 4) {
@@ -450,27 +381,15 @@ struct HokieSegmentedControl<Selection: Hashable>: View {
                     }
                 } label: {
                     Text(option.title)
-                        .font(.caption.weight(.black))
+                        .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                        .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                        .foregroundStyle(isSelected ? (accent == nil ? theme.onAccent : Color.white) : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background {
                             if isSelected {
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                accent.opacity(0.92),
-                                                Color.vtBurgundyDark.opacity(0.82),
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.16), lineWidth: 1))
-                                    .shadow(color: accent.opacity(0.16), radius: 8, x: 0, y: 4)
+                                Capsule().fill(accent ?? theme.accent)
                             }
                         }
                 }
@@ -492,45 +411,13 @@ struct HokieIconTile: View {
         let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
 
         ZStack {
-            shape
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            color.opacity(0.96),
-                            Color.vtBurgundyDark.opacity(0.76),
-                            Color.vtOrange.opacity(0.24),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    shape.stroke(Color.white.opacity(0.16), lineWidth: 1)
-                )
-                .overlay(alignment: .topLeading) {
-                    Circle()
-                        .fill(Color.white.opacity(0.18))
-                        .frame(width: size * 0.66, height: size * 0.66)
-                        .blur(radius: size * 0.24)
-                        .offset(x: -size * 0.22, y: -size * 0.24)
-                        .clipShape(shape)
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    Circle()
-                        .fill(Color.vtOrange.opacity(0.16))
-                        .frame(width: size * 0.86, height: size * 0.86)
-                        .blur(radius: size * 0.26)
-                        .offset(x: size * 0.28, y: size * 0.26)
-                        .clipShape(shape)
-                }
+            shape.fill(color)
 
             Image(systemName: symbol)
-                .font(.system(size: size * 0.42, weight: .black))
+                .font(.system(size: size * 0.42, weight: .semibold))
                 .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 2)
         }
         .frame(width: size, height: size)
-        .shadow(color: color.opacity(0.16), radius: 10, x: 0, y: 6)
         .accessibilityHidden(true)
     }
 }
@@ -545,7 +432,8 @@ struct HokieCompactPill: View {
         HStack(spacing: 7) {
             HokieIconTile(symbol: symbol, color: accent, size: 22)
             Text(title)
-                .font(.system(size: 14, weight: .black, design: .rounded))
+                .font(.agoraDisplay(15))
+                .foregroundStyle(AgoraPalette.brandInk)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -554,8 +442,6 @@ struct HokieCompactPill: View {
                 .fill(.regularMaterial)
             HokieGlassCapsuleBackground(strokeOpacity: 0.18)
         }
-        .overlay(Capsule().stroke(accent.opacity(0.18), lineWidth: 1))
-        .shadow(color: .black.opacity(0.10), radius: 12, x: 0, y: 7)
         .opacity(Double(progress))
         .scaleEffect(0.96 + (0.04 * progress))
         .allowsHitTesting(false)
@@ -564,42 +450,8 @@ struct HokieCompactPill: View {
 }
 
 struct HokieAppBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        ZStack {
-            (colorScheme == .dark
-                ? Color(red: 0.055, green: 0.012, blue: 0.018)
-                : Color(red: 0.992, green: 0.982, blue: 0.968))
-
-            LinearGradient(
-                colors: [
-                    Color.vtBurgundy.opacity(colorScheme == .dark ? 0.16 : 0.06),
-                    Color.vtOrange.opacity(colorScheme == .dark ? 0.08 : 0.045),
-                    Color.clear,
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                let lineCount = max(5, Int(proxy.size.height / 120))
-                ZStack {
-                    ForEach(0..<lineCount, id: \.self) { index in
-                        Capsule()
-                            .fill(Color.primary.opacity(colorScheme == .dark ? 0.035 : 0.025))
-                            .frame(width: width * 0.82, height: 1)
-                            .rotationEffect(.degrees(-10))
-                            .offset(
-                                x: index.isMultiple(of: 2) ? -width * 0.18 : width * 0.12,
-                                y: CGFloat(index) * 118 + 34
-                            )
-                    }
-                }
-            }
-            .allowsHitTesting(false)
-        }
+        AgoraPalette.background
     }
 }
 
@@ -689,6 +541,7 @@ struct ContentView: View {
 // MARK: - Floating Tab Bar
 
 struct FloatingTabBar: View {
+    @Environment(\.schoolTheme) private var theme
     @Binding var selectedTab: Int
 
     private let items: [(icon: String, label: String)] = [
@@ -709,29 +562,15 @@ struct FloatingTabBar: View {
                         Image(systemName: items[i].icon)
                             .font(.system(size: 16, weight: .semibold))
                         Text(items[i].label)
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .font(.system(size: 10, weight: .semibold))
                     }
-                    .foregroundStyle(isSelected ? .white : Color.secondary)
+                    .foregroundStyle(isSelected ? theme.onAccent : Color.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 23, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.vtBurgundy.opacity(0.92),
-                                            Color.vtBurgundyDark.opacity(0.86),
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 23, style: .continuous)
-                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                                )
-                                .shadow(color: Color.vtBurgundy.opacity(0.24), radius: 12, x: 0, y: 6)
+                                .fill(theme.accent)
                         }
                     }
                 }
@@ -1220,7 +1059,7 @@ func gpaColor(_ gpa: Double) -> Color {
 
 func centeredLoadingView(label: String) -> some View {
     VStack(spacing: 14) {
-        ProgressView().scaleEffect(1.3).tint(Color.vtBurgundy)
+        ProgressView().scaleEffect(1.3)
         Text(label).font(.subheadline).foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity).padding(.top, 48)
@@ -1236,13 +1075,12 @@ struct SectionLabel: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .black))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(color)
                 .frame(width: 22, height: 22)
 
             Text(title)
-                .font(.headline.weight(.black))
-                .fontDesign(.rounded)
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
         }
     }
@@ -1261,8 +1099,8 @@ struct HokieSheetHeader<Trailing: View>: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline.weight(.black))
-                    .fontDesign(.rounded)
+                    .font(.agoraDisplay(19))
+                    .foregroundStyle(AgoraPalette.brandInk)
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption.weight(.semibold))
@@ -1312,7 +1150,6 @@ struct AuditSummaryCard: View {
             }
 
             ProgressView(value: Double(audit.percentComplete), total: 100)
-                .tint(Color.vtBurgundy)
 
             HStack(spacing: 12) {
                 auditMetric(value: "\(Int(audit.completedCredits))/\(Int(audit.totalRequiredCredits))", label: "Credits")

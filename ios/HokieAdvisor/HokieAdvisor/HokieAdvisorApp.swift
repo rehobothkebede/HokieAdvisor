@@ -77,6 +77,11 @@ struct HokieAdvisorApp: App {
         UITabBar.appearance().backgroundImage = UIImage()
     }
 
+    /// Derived from the synced profile email; no separate institution state.
+    private var schoolTheme: SchoolTheme {
+        SchoolTheme.forStudentEmail(vtEmail)
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -96,6 +101,8 @@ struct HokieAdvisorApp: App {
                         .environmentObject(chatHistory)
                 }
             }
+            .environment(\.schoolTheme, schoolTheme)
+            .tint(schoolTheme.accent)
             .background(WindowAppearanceSetter(mode: appearanceMode))
             .preferredColorScheme(appPreferredColorScheme)
             .animation(.easeInOut(duration: 0.35), value: onboardingComplete)
@@ -311,7 +318,6 @@ private struct LaunchLoadingView: View {
             HokieAppBackground()
                 .ignoresSafeArea()
             ProgressView()
-                .tint(Color.vtBurgundy)
         }
     }
 }

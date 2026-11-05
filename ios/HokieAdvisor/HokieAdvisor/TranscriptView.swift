@@ -439,7 +439,7 @@ struct TranscriptView: View {
 
     private var loadingView: some View {
         VStack(spacing: 16) {
-            ProgressView().scaleEffect(1.5).tint(Color.vtBurgundy)
+            ProgressView().scaleEffect(1.5)
             Text("Parsing your transcript...")
                 .font(.headline.bold()).fontDesign(.rounded)
             Text("AI is reading your course history")
