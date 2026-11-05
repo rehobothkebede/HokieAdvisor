@@ -77,9 +77,10 @@ struct HokieAdvisorApp: App {
         UITabBar.appearance().backgroundImage = UIImage()
     }
 
-    /// Derived from the synced profile email; no separate institution state.
+    /// Signed in: the account's school. Signed out: neutral Agora; the welcome
+    /// flow applies the chosen school to sign-in itself.
     private var schoolTheme: SchoolTheme {
-        SchoolTheme.forStudentEmail(vtEmail)
+        isAuthenticated && authSessionActive ? SchoolTheme.forAccount(email: vtEmail) : .agora
     }
 
     var body: some Scene {
@@ -88,7 +89,7 @@ struct HokieAdvisorApp: App {
                 if !didCheckSession {
                     LaunchLoadingView()
                 } else if !isAuthenticated || !authSessionActive {
-                    LoginView(isAuthenticated: $isAuthenticated)
+                    SignedOutFlow(isAuthenticated: $isAuthenticated)
                         .environmentObject(appState)
                         .environmentObject(chatHistory)
                 } else if !onboardingComplete {

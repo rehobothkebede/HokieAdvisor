@@ -127,12 +127,14 @@ carries advisor phases 1–7 not yet on `main`). Started November 5, 2026.
 - [ ] Resolve product decisions 1–6
 - [x] Phase 1: `AgoraBrand` + semantic theme tokens + `SchoolTheme` environment
 - [x] Phase 2: background, glass, header, tab bar, icon tiles, pills
-- [ ] Phase 3: Login and Onboarding (wordmark, tagline, copy)
+- [x] Phase 3a: Welcome screen, school picker, signed-out flow, Login restyle
+- [ ] Phase 3b: Onboarding step screens (buttons, tiles, "Let's Go, Hokies!" pending decision 3)
 - [ ] Phase 4: Home and Audit/DARS (tokens + copy)
 - [ ] Phase 5: Advisor chat (bubbles, composer, graph/step tints; math/code untouched)
 - [ ] Phase 6: Profile/Settings (footer, Terms, Privacy, policies row)
-- [ ] Phase 7: `CFBundleDisplayName`, usage strings, asset catalog, icon (if approved)
-- [ ] Build passes after each phase (phases 1–2: passed)
+- [x] Phase 7a: `CFBundleDisplayName = Agora`, camera/photo usage strings
+- [ ] Phase 7b: asset catalog with real wordmark, icon (if approved)
+- [ ] Build passes after each phase (phases 1–3a, 7a: passed)
 - [ ] Visual QA light/dark on all four tabs + login/onboarding
 - [ ] Signed-in regression smoke test
 - [ ] Grep confirms no user-facing "Hokie Advisor" left in iOS; internal ids unchanged
@@ -195,7 +197,67 @@ Follow-ups found during QA (for screen phases):
 
 - Screen-level `.vtBurgundy` text on dark navy is low contrast (Advisor
   suggestion chips, Profile major pill). Move to `theme.accent` or brand ink.
-- Login still shows "Hokie Advisor" and explicit VT accents (phase 3).
-- The neutral Agora theme was not seen on-device: the simulator already had a
-  VT email stored. `vtEmail` is not cleared on sign-out, so a signed-out
-  returning student keeps VT accents on Login; decide if that is wanted.
+- ~~Login still shows "Hokie Advisor" and explicit VT accents~~ (done in stage 2).
+- ~~Neutral theme unseen; signed-out students keep VT accents~~ (resolved in
+  stage 2: signed out is always neutral Agora until a school is chosen).
+
+### Stage 2 — welcome experience (phases 3a, 7a)
+
+School selection research: the iOS app had no school picker or institution
+model; Virginia Tech was implicit. Migration 005 (not applied) backfills every
+existing profile to VT and defaults new profiles to VT. So:
+
+- `SchoolTheme.supported` (only Virginia Tech) is the one list of selectable
+  schools. No mock schools.
+- Signed-in accounts resolve with `SchoolTheme.forAccount(email:)`: match the
+  email domain, else Virginia Tech. This replaces stage 1's domain-only
+  lookup, which would have shown non-`vt.edu` accounts (allowed at sign-up) as
+  school-less.
+- The school picked before sign-in lives only in `SignedOutFlow` view state. No
+  new storage key; the account remains the source of truth after sign-in.
+
+New `WelcomeView.swift`:
+
+- `SignedOutFlow` replaces `LoginView` in the root's signed-out branch:
+  Welcome → school → Login (themed with the chosen school), with "Not at
+  <school>? Change school" back to Welcome. A pending email confirmation
+  (`pendingSignupEmail`) skips Welcome and opens Login directly.
+- `WelcomeView`: temporary text wordmark, "Your next chapter", "Understand your
+  degree. Plan what's next." New device → "Find your school". A device with a
+  previous account email → "Continue with Virginia Tech" plus "Choose a
+  different school".
+- `SchoolPickerSheet`: search over supported schools only; footnote
+  "Agora is available to Virginia Tech students today." No colors are shown
+  as a reason to choose.
+
+Other changes:
+
+- Root theme: signed in → account school; signed out → neutral Agora (Welcome
+  is always Agora navy/copper).
+- `LoginView`: Agora wordmark, school name as eyebrow, school accent header,
+  segmented control and `.agoraPrimary` submit button, `.agoraField()` inputs,
+  "Agora" in footer copy. Auth logic, PID → `@vt.edu` normalization, and
+  stored keys are unchanged.
+- `OnboardingView`: step 0 header is Agora + supporting line + school
+  eyebrow; progress bar uses school accent; product name → Agora in step
+  copy. Step layouts, "Let's Go, Hokies!", and storage unchanged.
+- Profile: school chip now comes from the theme (building icon + name, school
+  accent). Footer reads "Agora · v1.0.0 / Your next chapter". Terms/Privacy
+  text unchanged pending decision 4.
+- `Info.plist`: `CFBundleDisplayName = Agora`; usage strings say Agora. Bundle
+  id `com.hokieadvisor.HokieAdvisor`, URL scheme `hokieadvisor`, signing, and
+  `Hoki.icon` unchanged (verified in the built `Info.plist`).
+
+Verified on the iPhone 18 Pro simulator after a successful build:
+
+- New user (fresh install): Welcome with "Find your school", light and dark.
+- Returning signed-out user (account email on device, non-`vt.edu`):
+  "Continue with Virginia Tech".
+- Pending email confirmation: opens Login directly with VT accents and the
+  change-school link.
+- Signed-in returning user (`-HokieVisualQA`): skips Welcome and onboarding,
+  lands in tabs with VT accents; Profile shows the Virginia Tech chip.
+
+Not verified: tapping through Welcome → picker → Login (no simulator tap
+automation available; Simulator runs headless), and a real Supabase sign-in.
+The session-restore path in `restoreSession()` is unchanged.

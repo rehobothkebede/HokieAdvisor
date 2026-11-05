@@ -9,7 +9,9 @@ struct LoginView: View {
     }
 
     @Binding var isAuthenticated: Bool
+    var onChangeSchool: (() -> Void)? = nil
     @EnvironmentObject var appState: AppState
+    @Environment(\.schoolTheme) private var theme
     @AppStorage("studentName") private var studentName = ""
     @AppStorage("vtEmail") private var vtEmail = ""
     @AppStorage("vtPID") private var vtPID = ""
@@ -56,11 +58,20 @@ struct LoginView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 28) {
+                        HStack {
+                            AgoraWordmark(size: 26)
+                            Spacer()
+                        }
                         header
                         authCard
+                        if let onChangeSchool {
+                            Button("Not at \(theme.name)? Change school", action: onChangeSchool)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.horizontal, 24)
-                    .padding(.top, isKeyboardVisible ? 32 : 86)
+                    .padding(.top, isKeyboardVisible ? 32 : 56)
                     .padding(.bottom, isKeyboardVisible ? 340 : 40)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -87,16 +98,11 @@ struct LoginView: View {
 
     private var header: some View {
         HokiePageHeader(
-            title: "Hokie Advisor",
-            eyebrow: mode == .signIn ? "Welcome back" : "New Hokie setup",
-            subtitle: mode == .signIn ? "Sign in to your academic cockpit." : "Create your account and build your advising profile.",
+            title: mode == .signIn ? "Welcome back" : "Create account",
+            eyebrow: theme.name,
+            subtitle: mode == .signIn ? "Sign in to pick up where you left off." : "Set up your account, then finish your profile.",
             symbol: "graduationcap.fill",
-            accent: .vtOrange,
-            stat: HokieHeaderStat(
-                value: mode == .signIn ? "Login" : "Signup",
-                label: "VT students",
-                icon: mode == .signIn ? "person.badge.key.fill" : "person.badge.plus"
-            )
+            accent: theme.accent
         )
     }
 
@@ -104,8 +110,7 @@ struct LoginView: View {
         VStack(spacing: 18) {
             HokieSegmentedControl(
                 selection: $mode,
-                options: AuthMode.allCases.map { (value: $0, title: $0.rawValue) },
-                accent: .vtBurgundy
+                options: AuthMode.allCases.map { (value: $0, title: $0.rawValue) }
             )
             .onChange(of: mode) { _, _ in
                 errorMessage = ""
@@ -159,21 +164,16 @@ struct LoginView: View {
 
             Button { submitIfPossible() } label: {
                 HStack(spacing: 8) {
-                    if isLoading { ProgressView().tint(.white) }
+                    if isLoading { ProgressView().tint(theme.onAccent) }
                     Text(buttonTitle)
-                        .font(.body.bold())
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 17)
-                .background(canSubmit ? Color.vtBurgundy : Color.primary.opacity(0.06))
-                .foregroundStyle(canSubmit ? .white : Color(.tertiaryLabel))
-                .clipShape(Capsule())
             }
+            .buttonStyle(.agoraPrimary)
             .disabled(!canSubmit)
             .id(submitButtonID)
 
             Text(mode == .signIn
-                 ? "Use the email and password you created for Hokie Advisor."
+                 ? "Use the email and password you created for \(AgoraBrand.name)."
                  : "New accounts can finish setup after signing up.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -268,9 +268,7 @@ private extension View {
     func authFieldStyle() -> some View {
         self
             .font(.body)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 15)
-            .glassCapsule(strokeOpacity: 0.08)
+            .agoraField()
     }
 }
 

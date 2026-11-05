@@ -103,9 +103,13 @@ struct AgoraWordmark: View {
 // MARK: - School Theme
 //
 // School accents layered on the Agora base: selected tabs, primary buttons,
-// progress indicators. The student's institution is not stored here; it is
-// resolved from the profile email that already syncs from Supabase. When
-// `profiles.institution_id` ships (migration 005), resolve by its slug instead.
+// progress indicators. The student's institution is not stored here:
+// - Signed in: every account belongs to Virginia Tech today (migration 005
+//   backfills existing profiles to VT and defaults new ones to it), so the
+//   account resolves to its email's school, falling back to VT.
+// - Signed out: the school picked on the welcome screen, held only in view
+//   state until the student signs in.
+// When `profiles.institution_id` ships, resolve signed-in accounts by its slug.
 
 struct SchoolTheme: Equatable {
     /// Matches `institutions.slug` in migration 005. `nil` is the neutral Agora theme.
@@ -116,6 +120,8 @@ struct SchoolTheme: Equatable {
     let accentDeep: Color
     let onAccent: Color
     let secondaryAccent: Color
+
+    var isSchool: Bool { slug != nil }
 
     static let agora = SchoolTheme(
         slug: nil,
@@ -139,15 +145,22 @@ struct SchoolTheme: Equatable {
         secondaryAccent: Color(hex: 0xE5751F)
     )
 
+    /// Schools Agora actually supports. Only add a school here once its
+    /// catalog, audit, and advising support exist.
     static let supported: [SchoolTheme] = [.virginiaTech]
 
-    static func forStudentEmail(_ email: String) -> SchoolTheme {
-        guard let domain = email.split(separator: "@").last?.lowercased(), email.contains("@") else {
-            return .agora
+    /// The school for an existing account. See the note above for the VT fallback.
+    static func forAccount(email: String) -> SchoolTheme {
+        forEmailDomain(email) ?? .virginiaTech
+    }
+
+    static func forEmailDomain(_ email: String) -> SchoolTheme? {
+        guard email.contains("@"), let domain = email.split(separator: "@").last?.lowercased() else {
+            return nil
         }
         return supported.first { school in
             school.emailDomains.contains { domain == $0 || domain.hasSuffix(".\($0)") }
-        } ?? .agora
+        }
     }
 }
 

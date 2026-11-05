@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.schoolTheme) private var theme
     @EnvironmentObject var chatHistory: ChatHistoryStore
     @AppStorage("studentName") private var studentName = ""
     @AppStorage("graduationYear") private var graduationYear = ""
@@ -41,7 +42,7 @@ struct SettingsView: View {
                     settingsGroup(title: "About") { aboutSection }
                     settingsGroup(title: "") { dangerSection }
 
-                    Text("Hokie Advisor · v1.0.0\nA Virginia Tech Academic Advising Tool")
+                    Text("\(AgoraBrand.name) · v1.0.0\n\(AgoraBrand.tagline)")
                         .font(.caption2).foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                         .padding(.bottom, 4)
@@ -170,7 +171,16 @@ struct SettingsView: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    profileChip("Virginia Tech", foreground: .white, fill: .vtBurgundy)
+                    if theme.isSchool {
+                        Label(theme.name, systemImage: "building.columns.fill")
+                            .labelStyle(SchoolChipLabelStyle())
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(theme.onAccent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(theme.accent, in: Capsule())
+                            .accessibilityLabel("School: \(theme.name)")
+                    }
                     Spacer(minLength: 8)
                     if !graduationYear.isEmpty {
                         profileChip("'\(String(graduationYear.suffix(2)))", foreground: .vtOrange)
@@ -784,4 +794,13 @@ struct LegalSheet: View {
     SettingsView()
         .environmentObject(AppState())
         .environmentObject(ChatHistoryStore())
+}
+
+private struct SchoolChipLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.imageScale(.small)
+            configuration.title
+        }
+    }
 }

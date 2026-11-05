@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.schoolTheme) private var theme
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @AppStorage("studentName") private var storedName = ""
     @AppStorage("vtEmail") private var storedEmail = ""
@@ -65,7 +66,7 @@ struct OnboardingView: View {
             HStack(spacing: 5) {
                 ForEach(1...5, id: \.self) { i in
                     Capsule()
-                        .fill(i <= step ? Color.vtBurgundy : Color(.tertiarySystemFill))
+                        .fill(i <= step ? theme.accent : Color(.tertiarySystemFill))
                         .frame(height: 4)
                         .animation(.easeInOut(duration: 0.3), value: step)
                 }
@@ -86,11 +87,11 @@ struct OnboardingView: View {
             Spacer()
             VStack(spacing: 32) {
                 HokiePageHeader(
-                    title: "Hokie Advisor",
-                    eyebrow: "Start your path",
-                    subtitle: "A Virginia Tech academic cockpit for planning, audit checks, and course help.",
+                    title: AgoraBrand.name,
+                    eyebrow: theme.name,
+                    subtitle: AgoraBrand.supportingLine,
                     symbol: "graduationcap.fill",
-                    accent: .vtOrange,
+                    accent: theme.accent,
                     stat: HokieHeaderStat(value: "Setup", label: "takes a minute", icon: "sparkles")
                 )
                 .padding(.horizontal, 28)
@@ -190,7 +191,7 @@ struct OnboardingView: View {
     private var howHeardStep: some View {
         stepShell(icon: "megaphone.fill", iconColor: .purple,
                   title: "How did you hear about us?",
-                  subtitle: "Help us understand how students are finding Hokie Advisor.",
+                  subtitle: "Help us understand how students are finding Agora.",
                   canProceed: !howHeardSelection.isEmpty,
                   onContinue: {
                       storedHowHeard = howHeardSelection
@@ -241,7 +242,7 @@ struct OnboardingView: View {
         stepShell(
             icon: "paintbrush.fill", iconColor: .purple,
             title: "Pick your look",
-            subtitle: "Choose how Hokie Advisor appears. \"System\" matches your device setting and can always be changed later in Profile.",
+            subtitle: "Choose how Agora appears. \"System\" matches your device setting and can always be changed later in Profile.",
             canProceed: true,
             onContinue: { advance() }
         ) {
@@ -300,7 +301,7 @@ struct OnboardingView: View {
                         .multilineTextAlignment(.center)
                     Text(appState.hasTranscript
                          ? "\(appState.transcriptCourses.count) courses · \(Int(appState.totalCredits)) credits loaded."
-                         : "Upload your VT transcript so Hokie Advisor can give you personalised recommendations and track your degree.")
+                         : "Upload your VT transcript so Agora can give you personalised recommendations and track your degree.")
                         .font(.body).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center).lineSpacing(4)
                 }
@@ -350,8 +351,8 @@ struct OnboardingView: View {
                     Text(hasTranscript ? "You're all set!" : "Almost there!")
                         .font(.system(size: 38, weight: .bold, design: .rounded))
                     Text(hasTranscript
-                         ? "Welcome to Hokie Advisor\(first.isEmpty ? "!" : ", \(first)!")"
-                         : "Import your transcript to unlock your degree audit, personalized course plan, and the full Hokie Advisor experience.")
+                         ? "Welcome to Agora\(first.isEmpty ? "!" : ", \(first)!")"
+                         : "Import your transcript to unlock your degree audit, personalized course plan, and the full Agora experience.")
                         .font(.title3).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center).lineSpacing(4)
                 }
