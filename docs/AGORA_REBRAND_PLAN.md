@@ -134,10 +134,10 @@ carries advisor phases 1–7 not yet on `main`). Started November 5, 2026.
 - [x] Phase 6: Profile/Settings, Help & FAQ, Transcript/Tutoring/Memory/Legal sheets
 - [x] Phase 7a: `CFBundleDisplayName = Agora`, camera/photo usage strings
 - [ ] Phase 7b: asset catalog with real wordmark, icon (if approved)
-- [ ] Build passes after each phase (phases 1–6, 7a: passed)
-- [ ] Visual QA light/dark on all four tabs + login/onboarding
+- [x] Build passes after each phase (clean build passed in final review)
+- [x] Visual QA light/dark on all four tabs + login/onboarding (see final review for gaps)
 - [ ] Signed-in regression smoke test
-- [ ] Grep confirms no user-facing "Hokie Advisor" left in iOS; internal ids unchanged
+- [x] Grep confirms no user-facing "Hokie Advisor" left in iOS; internal ids unchanged
 
 ## Stage log
 
@@ -480,3 +480,61 @@ Needs owner review (decision 4): Terms/Privacy still say "Last updated: May
 2026", describe Agora as "an independent student project", and Privacy's
 Contact line points to "the Virginia Tech CS department", which is not an
 Agora support channel. Only the product name and control names were changed.
+
+### Final review (stage 6)
+
+Branch diff `d15e6f5..HEAD` (excluding this doc) touches only
+`ios/HokieAdvisor/HokieAdvisor/*.swift` and `ios/HokieAdvisor/Info.plist`.
+
+Verified:
+
+- No changes under `backend/` (code or migrations); untracked
+  `005_multi_institution.sql` and `docs/ADVISOR_FIX_PLAN.md` never staged.
+- `Hoki.icon` and `project.pbxproj` unchanged.
+- `Info.plist`: only `CFBundleDisplayName = Agora` added and two usage strings
+  reworded; bundle id `com.hokieadvisor.HokieAdvisor` and URL scheme
+  `hokieadvisor` unchanged.
+- No `@AppStorage` / `UserDefaults` / Keychain keys added, removed, or
+  renamed; new code only reads existing `vtEmail` and `pendingSignupEmail`.
+  Auth calls (`SupabaseAuthService`) unchanged.
+- No secrets or keys in the diff (pattern scan).
+- No user-facing "Hokie Advisor"; "Hokie" appears only via
+  `communityName` (VT). No "verified", "guarantee", or confidence wording.
+  `SchoolTheme.supported` holds only Virginia Tech.
+
+Final fixes in this stage:
+
+- Transcript, Onboarding, Tutoring: leftover rounded/black weights moved to
+  the system/serif styles; onboarding step titles now scale (`.largeTitle`
+  serif) instead of fixed 30/38pt.
+- Onboarding feature list: "AI advisor, always available" (overstated given
+  daily limits and outages) → "AI advisor for planning and study help";
+  "Degree audit at a glance" → "Degree progress at a glance"; tiles use the
+  school accent instead of stray blue/green.
+- Welcome: wordmark and tagline scale with Dynamic Type (capped), so the
+  supporting line no longer outgrows the tagline at large sizes.
+- Sheet headers: subtitle wraps to two lines instead of truncating.
+- Debug QA: `-HokieVisualQAOnboarding` shows onboarding for the sample
+  student.
+
+Screenshots: `docs/agora-review-screenshots/` (iPhone 18 Pro simulator,
+untracked; 24 MB, not committed). Prefixes: 01–04 welcome/sign-in/onboarding,
+10 Home, 11 Degree Progress, 20–23 Advisor, 30 Profile, 31 Help & FAQ.
+Suffixes give appearance (light/dark), `largetext` (Accessibility XL), and
+`empty`/`populated`.
+
+Could not check:
+
+- On-screen keyboard: the simulator uses a hardware keyboard, so no software
+  keyboard appears; only composer focus was captured. Keyboard-avoidance code
+  is unchanged.
+- Any tap-driven flow: Welcome → picker → sign-in, sign-in/sign-up
+  submission, onboarding steps 1–6, sheet dismissal, FAQ toggling by tap,
+  memory add/edit/delete, grad-year edit, Sign Out / Clear Local Data /
+  Reset Account. No tap automation is available; states were reached with
+  launch flags.
+- Real Supabase sign-in, session restore, profile sync, transcript/DARS
+  upload, live chat streaming, Continue answer, real attachment picking.
+- A loaded DARS audit (no sample in QA mode).
+- Physical devices, iPad, landscape, and VoiceOver navigation (labels were
+  added but not exercised).

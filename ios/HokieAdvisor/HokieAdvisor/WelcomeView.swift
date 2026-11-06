@@ -44,13 +44,15 @@ struct WelcomeView: View {
     let onSelectSchool: (SchoolTheme) -> Void
 
     @State private var showSchoolPicker = false
+    @ScaledMetric(relativeTo: .largeTitle) private var wordmarkSize: CGFloat = 56
+    @ScaledMetric(relativeTo: .title) private var taglineSize: CGFloat = 28
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: AgoraSpacing.xxl)
 
             VStack(spacing: AgoraSpacing.lg) {
-                AgoraWordmark(size: 56)
+                AgoraWordmark(size: min(wordmarkSize, 84))
 
                 Capsule()
                     .fill(AgoraPalette.copper)
@@ -58,7 +60,7 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
 
                 Text(AgoraBrand.tagline)
-                    .font(.agoraDisplay(28, weight: .regular))
+                    .font(.agoraDisplay(min(taglineSize, 44), weight: .regular))
                     .foregroundStyle(AgoraPalette.brandInk)
                     .multilineTextAlignment(.center)
 

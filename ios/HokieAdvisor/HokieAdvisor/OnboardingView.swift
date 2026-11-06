@@ -98,8 +98,8 @@ struct OnboardingView: View {
 
                 VStack(spacing: 10) {
                     featurePill("doc.text.fill", color: theme.accent, text: "Transcript-powered course planning")
-                    featurePill("brain.head.profile", color: .blue, text: "AI advisor, always available")
-                    featurePill("checkmark.seal.fill", color: .green, text: "Degree audit at a glance")
+                    featurePill("brain.head.profile", color: theme.accent, text: "AI advisor for planning and study help")
+                    featurePill("checkmark.seal.fill", color: theme.accent, text: "Degree progress at a glance")
                 }
                 .padding(.horizontal, 12)
             }
@@ -297,7 +297,7 @@ struct OnboardingView: View {
 
                 VStack(spacing: 12) {
                     Text(appState.hasTranscript ? "Transcript imported!" : "Import your transcript")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .serif, weight: .semibold))
                         .multilineTextAlignment(.center)
                     Text(appState.hasTranscript
                          ? "\(appState.transcriptCourses.count) courses · \(Int(appState.totalCredits)) credits loaded."
@@ -349,7 +349,7 @@ struct OnboardingView: View {
 
                 VStack(spacing: 10) {
                     Text(hasTranscript ? "You're all set!" : "Almost there!")
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .serif, weight: .semibold))
                     Text(hasTranscript
                          ? "Welcome to Agora\(first.isEmpty ? "!" : ", \(first)!")"
                          : "Import your transcript to unlock your degree audit, personalized course plan, and the full Agora experience.")
@@ -418,7 +418,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 14) {
                         HokieIconTile(symbol: icon, color: iconColor, size: 60)
-                        Text(title).font(.system(size: 30, weight: .bold, design: .rounded))
+                        Text(title).font(.system(.largeTitle, design: .serif, weight: .semibold))
                         Text(subtitle).font(.body).foregroundStyle(.secondary).lineSpacing(4)
                     }
                     content()

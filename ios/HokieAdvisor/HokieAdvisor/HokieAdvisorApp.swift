@@ -144,7 +144,8 @@ struct HokieAdvisorApp: App {
             seedVisualQAData()
             isAuthenticated = true
             authSessionActive = true
-            onboardingComplete = true
+            // `-HokieVisualQAOnboarding` shows onboarding for the sample student.
+            onboardingComplete = !ProcessInfo.processInfo.arguments.contains("-HokieVisualQAOnboarding")
             didCheckSession = true
             return
         }

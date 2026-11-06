@@ -1088,7 +1088,7 @@ struct TutoringSheet: View {
                 ) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .black))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(theme.accent)
                             .frame(width: 34, height: 34)
                             .glassCircle(strokeOpacity: 0.08)
@@ -1207,7 +1207,7 @@ struct HokieSheetHeader<Trailing: View>: View {
                     Text(subtitle)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
 

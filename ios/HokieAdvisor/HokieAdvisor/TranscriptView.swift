@@ -85,7 +85,7 @@ struct TranscriptView: View {
         ) {
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .black))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary.opacity(0.82))
                     .frame(width: 38, height: 38)
                     .glassCapsule(strokeOpacity: 0.08)
@@ -115,8 +115,7 @@ struct TranscriptView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Upload Transcript")
-                            .font(.title3.weight(.black))
-                            .fontDesign(.rounded)
+                            .font(.title3.weight(.bold))
                             .foregroundStyle(.primary)
                         Text("PDF, PNG, or JPG")
                             .font(.subheadline.weight(.semibold))
@@ -124,7 +123,7 @@ struct TranscriptView: View {
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.headline.weight(.black))
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(theme.secondaryAccent.opacity(0.8))
                 }
                 .padding(20)
@@ -200,7 +199,7 @@ struct TranscriptView: View {
             if let gpa = appState.calculatedGPA {
                 VStack(spacing: 2) {
                     Text(String(format: "%.2f", gpa))
-                        .font(.title2.bold()).fontDesign(.rounded)
+                        .font(.title2.bold())
                         .foregroundStyle(gpaColor(gpa))
                     Text("GPA").font(.caption2.bold()).foregroundStyle(.secondary)
                 }
@@ -242,7 +241,7 @@ struct TranscriptView: View {
             ForEach(courses) { course in
                 HStack(spacing: 10) {
                     Text(course.code)
-                        .font(.caption.weight(.black))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(theme.secondaryAccent)
                         .padding(.horizontal, 10).padding(.vertical, 5)
                         .background(theme.secondaryAccent.opacity(0.12), in: Capsule())
@@ -271,7 +270,7 @@ struct TranscriptView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(course.code)
-                    .font(.caption.weight(.black))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(theme.accent)
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(theme.accent.opacity(0.12), in: Capsule())
@@ -285,7 +284,7 @@ struct TranscriptView: View {
                     Button {
                         appState.inProgressGrades[course.code] = isSelected ? nil : grade
                     } label: {
-                        Text(grade).font(.subheadline.weight(.black))
+                        Text(grade).font(.subheadline.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .foregroundStyle(isSelected ? .white : color)
@@ -442,7 +441,7 @@ struct TranscriptView: View {
         VStack(spacing: 16) {
             ProgressView().scaleEffect(1.5)
             Text("Parsing your transcript...")
-                .font(.headline.bold()).fontDesign(.rounded)
+                .font(.headline.bold())
             Text("AI is reading your course history")
                 .font(.caption).foregroundStyle(.tertiary)
         }
@@ -544,7 +543,7 @@ struct TranscriptCourseCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(course.code)
-                        .font(.caption.weight(.black))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(theme.accent)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(theme.accent.opacity(0.12), in: Capsule())
@@ -553,7 +552,7 @@ struct TranscriptCourseCard: View {
                     if let grade = course.grade {
                         let badgeColor = gradeColor(grade)
                         Text(grade)
-                            .font(.caption.weight(.black))
+                            .font(.caption.weight(.bold))
                             .foregroundStyle(badgeColor)
                             .padding(.horizontal, 10).padding(.vertical, 4)
                             .background(badgeColor.opacity(0.12), in: Capsule())
