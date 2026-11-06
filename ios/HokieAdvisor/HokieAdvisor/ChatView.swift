@@ -8,6 +8,8 @@ struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var chatHistory: ChatHistoryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.schoolTheme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var vm = ChatViewModel()
     private let topID = "chatTop"
     private let bottomID = "chatBottom"
@@ -15,6 +17,7 @@ struct ChatView: View {
     private let keyboardComposerGap: CGFloat = 24
     private let keyboardMessageBottomPadding: CGFloat = 152
     @State private var showHistory = false
+    @State private var showTranscriptImport = false
     @State private var showAttachmentMenu = false
     @State private var showCameraPicker = false
     @State private var showFileImporter = false
@@ -97,6 +100,9 @@ struct ChatView: View {
             vm.transcriptCourses = appState.transcriptCourses
             vm.inProgressSummary = appState.inProgressSummary
             vm.transcriptNotes = appState.transcriptNotes
+            #if DEBUG
+            loadVisualQAChatIfRequested()
+            #endif
         }
         .onDisappear { vm.autoSave() }
         .onChange(of: appState.major) { _, major in
@@ -113,6 +119,9 @@ struct ChatView: View {
         .sheet(isPresented: $showHistory) {
             ChatHistorySheet(vm: vm)
                 .environmentObject(chatHistory)
+        }
+        .sheet(isPresented: $showTranscriptImport) {
+            TranscriptView().environmentObject(appState)
         }
         .sheet(isPresented: $showCameraPicker) {
             CameraCaptureView { image in
@@ -139,34 +148,33 @@ struct ChatView: View {
     private var header: some View {
         HokiePageHeader(
             title: "Advisor",
-            eyebrow: "Ask / plan / prove",
-            subtitle: "Visual math, CS planning, and chat memory for your next move.",
+            eyebrow: theme.isSchool ? theme.name : AgoraBrand.name,
+            subtitle: dynamicTypeSize.isAccessibilitySize
+                ? "Advising and study help."
+                : "Academic advising for your degree, with study help when you need it.",
             symbol: "bubble.left.and.bubble.right.fill",
-            accent: .vtBurgundy,
+            accent: theme.accent,
             stat: vm.messages.isEmpty ? nil : advisorHeaderStat
         ) {
             HStack(spacing: 8) {
-                Button { showHistory = true } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(Color.vtBurgundy)
-                        .frame(width: 38, height: 38)
-                        .glassCapsule(strokeOpacity: 0.08)
-                }
-                .accessibilityLabel("Chat history")
-
+                headerButton("clock.arrow.circlepath", label: "Chat history") { showHistory = true }
                 if !vm.messages.isEmpty {
-                    Button { vm.clearConversation() } label: {
-                        Image(systemName: "square.and.pencil")
-                            .font(.subheadline.weight(.black))
-                            .foregroundStyle(Color.vtBurgundy)
-                            .frame(width: 38, height: 38)
-                            .glassCapsule(strokeOpacity: 0.08)
-                    }
-                    .accessibilityLabel("New chat")
+                    headerButton("square.and.pencil", label: "New chat") { vm.clearConversation() }
                 }
             }
         }
+    }
+
+    private func headerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.accent)
+                .frame(width: 44, height: 44)
+                .glassCircle(strokeOpacity: 0.08)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private var advisorHeaderStat: HokieHeaderStat {
@@ -183,7 +191,7 @@ struct ChatView: View {
         HokieCompactPill(
             title: "Advisor",
             symbol: "bubble.left.and.bubble.right.fill",
-            accent: .vtBurgundy,
+            accent: theme.accent,
             progress: compactTitleProgress
         )
             .padding(.top, 8)
@@ -206,7 +214,7 @@ struct ChatView: View {
                                 .frame(height: messageBottomPadding)
                                 .id(emptyStateBottomID)
                         } else {
-                            LazyVStack(spacing: 10) {
+                            LazyVStack(spacing: 14) {
                                 ForEach(vm.messages) { MessageBubble(message: $0) }
                                 if vm.canContinueTruncatedAnswer && vm.isReadyForMessage {
                                     ContinueAnswerChip { Task { await vm.sendMessage(textOverride: ChatViewModel.continuePrompt) } }
@@ -293,40 +301,100 @@ struct ChatView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            MiniGraphPreview()
-                .frame(height: 124)
+        VStack(alignment: .leading, spacing: AgoraSpacing.xl) {
+            contextCard
 
-            VStack(spacing: 6) {
-                Text("Math + CS tutor")
-                    .font(.title3.bold()).fontDesign(.rounded)
-                Text("Graph theory, algorithms, proofs, linear algebra, calculus, and VT planning.")
+            if appState.needsTutoringSupport {
+                SuggestionChip(
+                    title: "I'm struggling with \(appState.strugglingCourses.first ?? "my classes"). What should I do?",
+                    icon: "lifepreserver"
+                ) { sendSuggestion("I'm struggling with \(appState.strugglingCourses.first ?? "my classes"). What should I do?") }
+            }
+
+            suggestionGroup("Plan your degree", icon: "checklist.checked", suggestions: planningSuggestions)
+            suggestionGroup("Study help", icon: "book.fill", suggestions: studySuggestions)
+        }
+        .padding(.top, AgoraSpacing.sm)
+    }
+
+    /// States only what the app actually sends with each question.
+    private var contextCard: some View {
+        VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
+            if appState.hasTranscript {
+                Label {
+                    Text(contextLine)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "doc.text.fill").foregroundStyle(theme.accent)
+                }
+            } else {
+                Text("Import your transcript so answers about requirements and courses can reflect your record.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                Button("Import transcript") { showTranscriptImport = true }
+                    .buttonStyle(.agoraSecondary)
             }
+        }
+        .padding(AgoraSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(cornerRadius: AgoraRadius.card)
+    }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                TopicChip(icon: "point.3.connected.trianglepath.dotted", label: "Graph theory")
-                TopicChip(icon: "function", label: "Calculus")
-                TopicChip(icon: "square.grid.3x3.fill", label: "Linear algebra")
-                TopicChip(icon: "chevron.left.forwardslash.chevron.right", label: "Algorithms")
-            }
+    private var contextLine: String {
+        let courses = appState.transcriptCourses.count
+        var line = "Questions include your transcript (\(courses) course\(courses == 1 ? "" : "s"))"
+        let memories = chatHistory.memories.count
+        if memories > 0 {
+            line += " and \(memories) saved memor\(memories == 1 ? "y" : "ies")"
+        }
+        return line + "."
+    }
 
-            VStack(spacing: 7) {
-                if appState.needsTutoringSupport {
-                    SuggestionChip(
-                        text: "I'm struggling with \(appState.strugglingCourses.first ?? "my classes"). What should I do?",
-                        vm: vm
-                    )
-                }
-                ForEach(suggestionChips, id: \.self) { text in
-                    SuggestionChip(text: text, vm: vm)
+    private struct Suggestion: Hashable {
+        let title: String
+        let icon: String
+        /// Sent as-is when set; otherwise `title` is placed in the composer to finish.
+        let prompt: String?
+    }
+
+    private var planningSuggestions: [Suggestion] {
+        [
+            Suggestion(title: "What requirements do I have left?", icon: "list.bullet.clipboard", prompt: "What requirements do I have left?"),
+            Suggestion(title: "Explain my latest degree audit.", icon: "doc.text.magnifyingglass", prompt: "Explain my latest degree audit."),
+            Suggestion(title: "What prerequisites am I missing?", icon: "arrow.triangle.branch", prompt: "What prerequisites am I missing for the courses I want to take next?"),
+            Suggestion(title: "Help me prepare for my advising appointment.", icon: "calendar.badge.clock", prompt: "Help me prepare for my advising appointment."),
+        ]
+    }
+
+    private var studySuggestions: [Suggestion] {
+        [
+            Suggestion(title: "Help me understand a course topic…", icon: "lightbulb", prompt: nil),
+            Suggestion(title: "Show me BFS on a graph with a visual", icon: "point.3.connected.trianglepath.dotted", prompt: "Show me BFS on a graph with a visual"),
+        ]
+    }
+
+    private func suggestionGroup(_ title: String, icon: String, suggestions: [Suggestion]) -> some View {
+        VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
+            SectionLabel(title: title, icon: icon, color: theme.accent)
+            ForEach(suggestions, id: \.self) { suggestion in
+                SuggestionChip(title: suggestion.title, icon: suggestion.icon) {
+                    if let prompt = suggestion.prompt {
+                        sendSuggestion(prompt)
+                    } else {
+                        vm.inputText = "Help me understand "
+                        isInputFocused = true
+                    }
                 }
             }
         }
-        .padding(.top, 20).padding(.horizontal, 16)
+    }
+
+    private func sendSuggestion(_ text: String) {
+        vm.inputText = text
+        Task { await vm.sendMessage() }
     }
 
     private func resetEmptyChatToTop(_ proxy: ScrollViewProxy) {
@@ -345,17 +413,6 @@ struct ChatView: View {
                 }
             }
         }
-    }
-
-    private var suggestionChips: [String] {
-        let major = vm.major.isEmpty ? (appState.major.isEmpty ? "my major" : appState.major) : vm.major
-        return [
-            "Show me BFS on a graph with a visual",
-            "Explain paths vs circuits in graph theory",
-            "Walk me through an eigenvalue example",
-            "Help me prove a recurrence by induction",
-            "What \(major) courses should I take next semester?",
-        ]
     }
 
     // MARK: - Input Bar
@@ -380,7 +437,7 @@ struct ChatView: View {
             if draftOverflow > 0 {
                 Text("Message is \(draftOverflow.formatted()) characters over the \(ChatViewModel.maxMessageCharacters.formatted())-character limit.")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.vtBurgundy)
+                    .foregroundStyle(.red)
                     .padding(.leading, 66)
                     .transition(.opacity)
             }
@@ -395,14 +452,14 @@ struct ChatView: View {
                     }
 
                     HStack(alignment: .bottom, spacing: 8) {
-                        TextField("Ask a question...", text: $vm.inputText, axis: .vertical)
+                        TextField("Ask about your degree or a course", text: $vm.inputText, axis: .vertical)
                             .focused($isInputFocused)
                             .lineLimit(1...5)
                             .submitLabel(.return)
                             .textInputAutocapitalization(.sentences)
                             .autocorrectionDisabled(false)
-                            .tint(Color.vtBurgundy)
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .tint(theme.accent)
+                            .font(.body)
                             .padding(.leading, 18)
                             .padding(.vertical, 13)
 
@@ -413,9 +470,11 @@ struct ChatView: View {
                                 } label: {
                                     Image(systemName: "arrow.up")
                                         .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(canSubmitDraft ? Color.white : Color.secondary)
+                                        .foregroundStyle(canSubmitDraft ? theme.onAccent : Color.secondary)
                                         .frame(width: 38, height: 38)
-                                        .background(canSubmitDraft ? Color.vtBurgundy : Color.primary.opacity(0.08), in: Circle())
+                                        .background(canSubmitDraft ? theme.accent : Color.primary.opacity(0.08), in: Circle())
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(!canSubmitDraft)
@@ -437,10 +496,10 @@ struct ChatView: View {
                                 .transition(.scale(scale: 0.88).combined(with: .opacity))
                             }
                         }
-                        .padding(.trailing, 8)
-                        .padding(.bottom, 5)
+                        .padding(.trailing, 5)
+                        .padding(.bottom, 2)
                     }
-                    .glassSurface(cornerRadius: 28, strokeOpacity: 0.08)
+                    .glassSurface(cornerRadius: 24, strokeOpacity: 0.08)
                     .animation(controlAnimation, value: hasSendableDraft)
                 }
 
@@ -545,6 +604,64 @@ struct ChatView: View {
     }
 }
 
+#if DEBUG
+extension ChatView {
+    /// `-HokieVisualQAChat` opens a long sample conversation covering markdown,
+    /// long math, a stepped graph, an attachment, and cut-off/interrupted answers.
+    /// `-HokieVisualQAKeyboard` also focuses the composer.
+    fileprivate func loadVisualQAChatIfRequested() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-HokieVisualQAChat"), vm.messages.isEmpty else { return }
+        let longMath = #"$$\sum_{k=1}^{n} k^2 = \frac{n(n+1)(2n+1)}{6} \quad\text{and}\quad \int_0^1 x^2\,dx + \int_1^2 (3x^2 - 2x + 1)\,dx + \int_2^3 e^{x}\sin(x)\,dx$$"#
+        let graph = """
+        ```graph
+        A - B
+        A - C
+        B - D
+        C - D
+        D - E
+        step: A | Start at A
+        step: A, B, C | Visit A's neighbors
+        step: A -> B -> D | Reach D through B
+        step: A -> B -> D -> E | E is two layers past B
+        ```
+        """
+        let messages: [ChatMessage] = [
+            ChatMessage(role: "user", content: "What requirements do I have left?"),
+            ChatMessage(role: "assistant", content: """
+            ## Remaining requirements
+            Based on your transcript, these groups are still open:
+
+            - **Systems**: CS 2506 (after CS 2505)
+            - **Upper-division CS**: 21 credits
+            - **Pathways 2 and 3**: one course each
+
+            1. Register for CS 2506 next term.
+            2. Pick one Pathways 2 course that fits your schedule.
+
+            Confirm the list with your official DARS audit before registering.
+            """),
+            ChatMessage(role: "user", content: "Can you check this sum and integral?\n\n📎 Homework 4.pdf"),
+            ChatMessage(role: "assistant", content: "The closed form is right. Here is the whole expression on one line:\n\n\(longMath)\n\nInline, that first sum is $\\frac{n(n+1)(2n+1)}{6}$."),
+            ChatMessage(role: "user", content: "Show me BFS on a graph with a visual"),
+            ChatMessage(role: "assistant", content: "BFS explores one layer at a time. Step through it:\n\n\(graph)\n\n```swift\nvar queue = [start]\nwhile !queue.isEmpty { let node = queue.removeFirst() }\n```" + ChatViewModel.truncationNote),
+            ChatMessage(role: "user", content: "And DFS?"),
+            ChatMessage(role: "assistant", content: "DFS goes deep before wide. Start at A, then follow one branch" + ChatViewModel.interruptionNote),
+        ]
+        // Loaded after the scroll reader is in place, the way a history pick arrives.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            vm.loadSession(ChatSession(id: UUID(), title: "Visual QA", date: Date(), messages: messages))
+            if arguments.contains("-HokieVisualQAChatError") {
+                vm.errorMessage = "The advisor is unavailable right now. Try again in a moment."
+            }
+        }
+        if arguments.contains("-HokieVisualQAKeyboard") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { isInputFocused = true }
+        }
+    }
+}
+#endif
+
 struct ChatComposerCircleButton: View {
     let systemName: String
     var isActive = false
@@ -603,6 +720,8 @@ struct ChatAttachment: Identifiable {
 }
 
 struct ChatAttachmentChip: View {
+    @Environment(\.schoolTheme) private var theme
+
     let attachment: ChatAttachment
     let onRemove: () -> Void
 
@@ -617,7 +736,7 @@ struct ChatAttachmentChip: View {
             } else {
                 Image(systemName: attachment.kind.icon)
                     .font(.caption.bold())
-                    .foregroundStyle(Color.vtBurgundy)
+                    .foregroundStyle(theme.accent)
                     .frame(width: 34, height: 34)
                     .glassCircle(strokeOpacity: 0.08)
             }
@@ -636,9 +755,11 @@ struct ChatAttachmentChip: View {
                 Image(systemName: "xmark")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove attachment")
         }
         .padding(.leading, 8)
         .padding(.trailing, 6)
@@ -674,20 +795,22 @@ struct ChatAttachmentMenu: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
-        .frame(width: 250, alignment: .leading)
-        .glassSurface(cornerRadius: 30, strokeOpacity: 0.08)
+        .frame(width: 240, alignment: .leading)
+        .glassSurface(cornerRadius: AgoraRadius.card, strokeOpacity: 0.08)
     }
 }
 
 struct AttachmentMenuRow: View {
+    @Environment(\.schoolTheme) private var theme
+
     let icon: String
     let title: String
 
     var body: some View {
-        HStack(spacing: 18) {
-            HokieIconTile(symbol: icon, color: .vtBurgundy, size: 44)
+        HStack(spacing: 14) {
+            HokieIconTile(symbol: icon, color: theme.accent, size: 40)
             Text(title)
-                .font(.title3.bold())
+                .font(.body.weight(.semibold))
                 .foregroundStyle(.primary)
             Spacer()
         }
@@ -739,76 +862,144 @@ struct CameraCaptureView: UIViewControllerRepresentable {
 // MARK: - Message Bubble
 
 struct MessageBubble: View {
+    @Environment(\.schoolTheme) private var theme
+
     let message: ChatMessage
     private var isUser: Bool { message.role == "user" }
+
+    private enum AnswerStatus {
+        case truncated, interrupted
+    }
+
+    /// Splits the status notes `ChatViewModel` appends to stored text so they can
+    /// be shown as labels. The stored message itself is unchanged.
+    private var parsed: (text: String, status: AnswerStatus?) {
+        let content = message.content
+        if content.hasSuffix(ChatViewModel.truncationNote) {
+            return (String(content.dropLast(ChatViewModel.truncationNote.count)), .truncated)
+        }
+        if content.hasSuffix(ChatViewModel.interruptionNote) {
+            return (String(content.dropLast(ChatViewModel.interruptionNote.count)), .interrupted)
+        }
+        return (content, nil)
+    }
+
+    /// Splits off the "📎 name" line `ChatViewModel` adds for an attachment.
+    private var userParts: (text: String, attachment: String?) {
+        let marker = "\n\n📎 "
+        guard let range = message.content.range(of: marker, options: .backwards) else {
+            return (message.content, nil)
+        }
+        return (String(message.content[..<range.lowerBound]), String(message.content[range.upperBound...]))
+    }
 
     @ViewBuilder
     private var bubbleContent: some View {
         if isUser {
-            Text(message.content)
-                .font(.subheadline).foregroundStyle(.white)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Color.vtBurgundy.opacity(0.88))
-                .clipShape(RoundedRectangle(cornerRadius: 22))
+            let parts = userParts
+            VStack(alignment: .trailing, spacing: 8) {
+                if !parts.text.isEmpty {
+                    Text(parts.text)
+                        .font(.body)
+                        .foregroundStyle(theme.onAccent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let attachment = parts.attachment {
+                    Label(attachment, systemImage: "paperclip")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(theme.onAccent)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(theme.onAccent.opacity(0.16), in: Capsule())
+                        .accessibilityLabel("Attachment: \(attachment)")
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(theme.accent, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                MarkdownBody(text: message.content.isEmpty ? " " : message.content, baseColor: .primary)
+            let parts = parsed
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Advisor")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                MarkdownBody(text: parts.text.isEmpty ? " " : parts.text, baseFont: .body, baseColor: .primary)
                 if message.isStreaming {
                     StreamingCursor()
                 }
+                if let status = parts.status {
+                    statusLabel(status)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
+            .padding(.vertical, 4)
         }
+    }
+
+    private func statusLabel(_ status: AnswerStatus) -> some View {
+        Label(
+            status == .truncated ? "Answer was cut off. Ask to continue." : "Answer interrupted before it finished.",
+            systemImage: status == .truncated ? "scissors" : "pause.circle"
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .glassInset(cornerRadius: 10)
     }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            if isUser { Spacer(minLength: 60) }
+            if isUser { Spacer(minLength: 48) }
             bubbleContent
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(isUser ? "You" : "Advisor")
     }
 }
 
 // MARK: - Streaming Cursor
 
 struct StreamingCursor: View {
+    @Environment(\.schoolTheme) private var theme
     @State private var visible = true
     let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     var body: some View {
         RoundedRectangle(cornerRadius: 1)
-            .frame(width: 2, height: 14)
-            .foregroundStyle(Color.vtBurgundy)
+            .frame(width: 2, height: 16)
+            .foregroundStyle(theme.accent)
             .opacity(visible ? 1 : 0)
             .animation(.easeInOut(duration: 0.15), value: visible)
             .onReceive(timer) { _ in visible.toggle() }
+            .accessibilityHidden(true)
     }
 }
 
 // MARK: - Typing Indicator
 
 struct TypingIndicator: View {
+    @Environment(\.schoolTheme) private var theme
     @State private var phase = 0
     let timer = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            HokieIconTile(symbol: "brain.head.profile", color: .vtBurgundy, size: 32)
-
+        HStack(spacing: 10) {
             HStack(spacing: 5) {
                 ForEach(0..<3) { i in
                     Circle().frame(width: 7, height: 7)
-                        .foregroundStyle(Color.secondary.opacity(phase == i ? 1 : 0.3))
+                        .foregroundStyle(theme.accent.opacity(phase == i ? 1 : 0.3))
                         .animation(.easeInOut(duration: 0.3), value: phase)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .glassSurface(cornerRadius: 22)
-
-            Spacer(minLength: 48)
+            Text("Thinking")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .glassCapsule(strokeOpacity: 0.08)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onReceive(timer) { _ in phase = (phase + 1) % 3 }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Advisor is responding")
     }
 }
 
@@ -817,27 +1008,35 @@ struct TypingIndicator: View {
 struct ErrorBanner: View {
     let message: String
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            Text(message).font(.caption).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .padding(14).frame(maxWidth: .infinity)
-        .glassSurface(cornerRadius: 18)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(cornerRadius: AgoraRadius.inset)
     }
 }
 
 // MARK: - Continue Chip
 
 struct ContinueAnswerChip: View {
+    @Environment(\.schoolTheme) private var theme
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Label("Continue answer", systemImage: "arrow.down.forward")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.vtBurgundy)
-                .padding(.horizontal, 15).padding(.vertical, 10)
-                .glassCapsule(strokeOpacity: 0.08)
+                .foregroundStyle(theme.onAccent)
+                .padding(.horizontal, 16).padding(.vertical, 11)
+                .background(theme.accent, in: Capsule())
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -848,124 +1047,32 @@ struct ContinueAnswerChip: View {
 // MARK: - Suggestion Chip
 
 struct SuggestionChip: View {
-    let text: String
-    let vm: ChatViewModel
+    @Environment(\.schoolTheme) private var theme
 
-    var body: some View {
-        Button {
-            vm.inputText = text
-            Task { await vm.sendMessage() }
-        } label: {
-            Text(text).font(.subheadline).foregroundStyle(Color.vtBurgundy)
-                .padding(.horizontal, 15).padding(.vertical, 11)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassSurface(cornerRadius: 18, strokeOpacity: 0.07)
-        }
-    }
-}
-
-struct TopicChip: View {
+    let title: String
     let icon: String
-    let label: String
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.caption.bold())
-                .foregroundStyle(Color.vtBurgundy)
-            Text(label)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .glassSurface(cornerRadius: 12, strokeOpacity: 0.06)
-    }
-}
-
-struct MiniGraphPreview: View {
-    private let nodes: [(String, CGPoint)] = [
-        ("A", CGPoint(x: 0.18, y: 0.24)),
-        ("B", CGPoint(x: 0.50, y: 0.18)),
-        ("C", CGPoint(x: 0.30, y: 0.72)),
-        ("D", CGPoint(x: 0.72, y: 0.66)),
-        ("E", CGPoint(x: 0.84, y: 0.30)),
-    ]
-
-    private let edges = [(0, 1), (0, 2), (1, 3), (1, 4), (2, 3), (3, 4)]
-    private let path = Set([0, 1, 3])
-    private let pathEdges = Set(["0-1", "1-3"])
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color.clear)
-                    .glassSurface(cornerRadius: 18, strokeOpacity: 0.08)
-
-                ForEach(Array(edges.enumerated()), id: \.offset) { _, edge in
-                    let a = scaled(nodes[edge.0].1, in: proxy.size)
-                    let b = scaled(nodes[edge.1].1, in: proxy.size)
-                    let key = "\(edge.0)-\(edge.1)"
-                    Path { path in
-                        path.move(to: a)
-                        path.addLine(to: b)
-                    }
-                    .stroke(
-                        pathEdges.contains(key) ? Color.vtBurgundy : Color.secondary.opacity(0.35),
-                        style: StrokeStyle(lineWidth: pathEdges.contains(key) ? 4 : 1.5, lineCap: .round)
-                    )
-                }
-
-                ForEach(Array(nodes.enumerated()), id: \.offset) { index, node in
-                    let highlighted = path.contains(index)
-                    Text(node.0)
-                        .font(.caption.bold())
-                        .foregroundStyle(highlighted ? .white : .primary)
-                        .frame(width: 36, height: 36)
-                        .background {
-                            Circle()
-                                .fill(
-                                    highlighted
-                                        ? LinearGradient(
-                                            colors: [Color.vtBurgundy.opacity(0.92), Color.vtOrange.opacity(0.38)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                        : LinearGradient(
-                                            colors: [Color.primary.opacity(0.08), Color.white.opacity(0.02)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                )
-                        }
-                        .overlay(Circle().stroke(Color.secondary.opacity(0.20), lineWidth: 1))
-                        .position(scaled(node.1, in: proxy.size))
-                }
-
-                VStack {
-                    Spacer()
-                    HStack {
-                        Label("shortest path A → D", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(Color.vtBurgundy)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(Color.vtBurgundy.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.vtBurgundy.opacity(0.14), lineWidth: 1))
-                        Spacer()
-                    }
-                    .padding(12)
-                }
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.accent)
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .glassSurface(cornerRadius: AgoraRadius.inset, strokeOpacity: 0.07)
         }
-    }
-
-    private func scaled(_ point: CGPoint, in size: CGSize) -> CGPoint {
-        CGPoint(x: point.x * size.width, y: point.y * size.height)
+        .buttonStyle(.plain)
     }
 }
 
@@ -973,6 +1080,7 @@ struct MiniGraphPreview: View {
 
 struct ChatHistorySheet: View {
     @EnvironmentObject var chatHistory: ChatHistoryStore
+    @Environment(\.schoolTheme) private var theme
     @ObservedObject var vm: ChatViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -989,11 +1097,11 @@ struct ChatHistorySheet: View {
                 if chatHistory.sessions.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 46))
-                            .foregroundStyle(Color.vtBurgundy.opacity(0.4))
+                            .font(.system(size: 40))
+                            .foregroundStyle(theme.accent.opacity(0.5))
                         Text("No saved chats yet")
-                            .font(.title3.bold()).fontDesign(.rounded)
-                            .foregroundStyle(.secondary)
+                            .font(.agoraDisplay(22))
+                            .foregroundStyle(AgoraPalette.brandInk)
                         Text("Your conversations are automatically saved as you chat.")
                             .font(.subheadline).foregroundStyle(.tertiary)
                             .multilineTextAlignment(.center)
@@ -1034,7 +1142,7 @@ struct ChatHistorySheet: View {
                     title: "Chat History",
                     subtitle: "\(chatHistory.sessions.count) saved conversation\(chatHistory.sessions.count == 1 ? "" : "s")",
                     symbol: "clock.arrow.circlepath",
-                    accent: .vtBurgundy
+                    accent: theme.accent
                 ) {
                     HStack(spacing: 8) {
                         Button {
@@ -1042,8 +1150,8 @@ struct ChatHistorySheet: View {
                             dismiss()
                         } label: {
                             Image(systemName: "square.and.pencil")
-                                .font(.system(size: 13, weight: .black))
-                                .frame(width: 34, height: 34)
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(width: 44, height: 44)
                                 .glassCircle(strokeOpacity: 0.08)
                         }
                         .accessibilityLabel("New chat")
@@ -1051,14 +1159,14 @@ struct ChatHistorySheet: View {
 
                         Button { dismiss() } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .black))
-                                .frame(width: 34, height: 34)
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(width: 44, height: 44)
                                 .glassCircle(strokeOpacity: 0.08)
                         }
                         .accessibilityLabel("Close")
                         .buttonStyle(.plain)
                     }
-                    .foregroundStyle(Color.vtBurgundy)
+                    .foregroundStyle(theme.accent)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -1068,6 +1176,8 @@ struct ChatHistorySheet: View {
 }
 
 private struct ChatHistoryRow: View {
+    @Environment(\.schoolTheme) private var theme
+
     let session: ChatSession
     let isCurrent: Bool
     let dateText: String
@@ -1084,24 +1194,20 @@ private struct ChatHistoryRow: View {
                 HStack(spacing: 12) {
                     HokieIconTile(
                         symbol: isCurrent ? "checkmark.bubble.fill" : "text.bubble.fill",
-                        color: isCurrent ? .vtBurgundy : .vtOrange,
+                        color: isCurrent ? theme.accent : AgoraPalette.brandInk.opacity(0.75),
                         size: 40
                     )
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(session.title)
-                            .font(.subheadline.weight(.black))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                            .lineLimit(2)
+                            .lineLimit(3)
 
-                        HStack(spacing: 6) {
-                            Text(dateText)
-                            Text("/")
-                            Text("\(userMessageCount) \(userMessageCount == 1 ? "message" : "messages")")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        Text("\(dateText) · \(userMessageCount) \(userMessageCount == 1 ? "message" : "messages")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer(minLength: 8)
@@ -1112,9 +1218,9 @@ private struct ChatHistoryRow: View {
 
             Button(action: onDelete) {
                 Image(systemName: "trash.fill")
-                    .font(.caption.weight(.black))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.red.opacity(0.82))
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .glassCircle(strokeOpacity: 0.08)
             }
             .buttonStyle(.plain)

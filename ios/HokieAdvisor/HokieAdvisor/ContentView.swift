@@ -1964,6 +1964,8 @@ struct MarkdownBody: View {
 // MARK: - LaTeX Rendering
 
 struct ResourceLinkCard: View {
+    @Environment(\.schoolTheme) private var theme
+
     let title: String
     let url: URL
 
@@ -1972,7 +1974,7 @@ struct ResourceLinkCard: View {
             HStack(spacing: 10) {
                 Image(systemName: "play.rectangle.fill")
                     .font(.headline)
-                    .foregroundStyle(Color.vtOrange)
+                    .foregroundStyle(theme.accent)
                     .frame(width: 34, height: 34)
                     .glassCircle(strokeOpacity: 0.08)
 
@@ -2000,6 +2002,7 @@ struct ResourceLinkCard: View {
 struct GraphDiagramView: View {
     let content: String
 
+    @Environment(\.schoolTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stepIndex = 0
 
@@ -2021,7 +2024,7 @@ struct GraphDiagramView: View {
             HStack(spacing: 8) {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.caption.bold())
-                    .foregroundStyle(Color.vtBurgundy)
+                    .foregroundStyle(theme.accent)
                 Text("Visual model")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
@@ -2057,7 +2060,7 @@ struct GraphDiagramView: View {
             ForEach(Array(graph.edges.enumerated()), id: \.offset) { _, edge in
                 if let a = positions[edge.from], let b = positions[edge.to] {
                     let lit = graph.isHighlighted(edge, in: highlight)
-                    let tint = lit ? Color.vtBurgundy : Color.secondary.opacity(0.45)
+                    let tint = lit ? theme.accent : Color.secondary.opacity(0.45)
                     let end = trimmed(from: a, to: b, by: boundaryDistance(edge.to, from: a, to: b))
                     let start = trimmed(from: b, to: a, by: boundaryDistance(edge.from, from: b, to: a))
 
@@ -2075,7 +2078,7 @@ struct GraphDiagramView: View {
                     if let weight = edge.weight {
                         Text(weight)
                             .font(.caption2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(lit ? Color.vtBurgundy : .secondary)
+                            .foregroundStyle(lit ? theme.accent : .secondary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
                             .background(.regularMaterial, in: Capsule())
@@ -2122,7 +2125,7 @@ struct GraphDiagramView: View {
         } label: {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(enabled ? Color.vtBurgundy : Color.secondary.opacity(0.4))
+                .foregroundStyle(enabled ? theme.accent : Color.secondary.opacity(0.4))
                 .frame(width: 36, height: 36)
                 .glassCircle(strokeOpacity: 0.08)
         }
@@ -2136,19 +2139,19 @@ struct GraphDiagramView: View {
             .font(.caption.bold())
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-            .foregroundStyle(highlighted ? .white : .primary)
+            .foregroundStyle(highlighted ? theme.onAccent : .primary)
             .padding(.horizontal, label.count > 3 ? 8 : 0)
             .frame(maxWidth: 96)
             .fixedSize(horizontal: false, vertical: true)
             .frame(width: nodeRadius(label) * 2, height: 38)
-            .background(highlighted ? Color.vtBurgundy : Color.primary.opacity(0.08), in: Capsule())
+            .background(highlighted ? theme.accent : Color.primary.opacity(0.08), in: Capsule())
             .overlay(
                 Capsule().stroke(
-                    isCurrent ? Color.vtOrange : (highlighted ? Color.vtBurgundy : Color.secondary.opacity(0.35)),
+                    isCurrent ? theme.secondaryAccent : (highlighted ? theme.accent : Color.secondary.opacity(0.35)),
                     lineWidth: isCurrent ? 2.5 : 1
                 )
             )
-            .shadow(color: highlighted ? Color.vtBurgundy.opacity(0.22) : .clear, radius: 8, y: 4)
+            .shadow(color: highlighted ? theme.accent.opacity(0.22) : .clear, radius: 8, y: 4)
     }
 
     /// Approximate half-width of a node capsule, so edges stop at its edge.

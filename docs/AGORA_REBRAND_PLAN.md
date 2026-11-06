@@ -130,11 +130,11 @@ carries advisor phases 1–7 not yet on `main`). Started November 5, 2026.
 - [x] Phase 3a: Welcome screen, school picker, signed-out flow, Login restyle
 - [ ] Phase 3b: Onboarding step screens (buttons, tiles, "Let's Go, Hokies!" pending decision 3)
 - [x] Phase 4: Home and Audit/DARS (redesign, tokens, copy)
-- [ ] Phase 5: Advisor chat (bubbles, composer, graph/step tints; math/code untouched)
+- [x] Phase 5: Advisor chat (bubbles, composer, graph/step tints; math/code untouched)
 - [ ] Phase 6: Profile/Settings (footer, Terms, Privacy, policies row)
 - [x] Phase 7a: `CFBundleDisplayName = Agora`, camera/photo usage strings
 - [ ] Phase 7b: asset catalog with real wordmark, icon (if approved)
-- [ ] Build passes after each phase (phases 1–4, 7a: passed)
+- [ ] Build passes after each phase (phases 1–5, 7a: passed)
 - [ ] Visual QA light/dark on all four tabs + login/onboarding
 - [ ] Signed-in regression smoke test
 - [ ] Grep confirms no user-facing "Hokie Advisor" left in iOS; internal ids unchanged
@@ -327,3 +327,70 @@ built from the same cards), scrolled-to-bottom positions (no simulator scroll
 automation), and Home's degree-progress card in QA mode (the sample audit
 only loads when the Audit tab opens; in real use it also comes from the
 Supabase restore).
+
+### Stage 4 — Advisor (phase 5)
+
+Visual only. `ChatViewModel`, `APIService`, request payloads, prompts, model
+settings, streaming, cancellation (switching or clearing chats supersedes the
+active request), truncation/interruption handling, saving, memories, and the
+attachment pipeline are unchanged. `ChatViewModel.swift` is not modified.
+
+`ChatView.swift`:
+
+- Header: "Advisor", school eyebrow, subtitle "Academic advising for your
+  degree, with study help when you need it." (shorter at accessibility
+  sizes). History and new-chat buttons are 44pt, school accent.
+- Empty state: removed the decorative sample graph and non-interactive topic
+  chips. A context card states only what the app sends: "Questions include
+  your transcript (N courses) and N saved memories", or, without a
+  transcript, an "Import transcript" button (same `TranscriptView` sheet).
+  Suggestions in two groups:
+  - Plan your degree: What requirements do I have left? / Explain my latest
+    degree audit. / What prerequisites am I missing? / Help me prepare for my
+    advising appointment.
+  - Study help: "Help me understand a course topic…" (puts "Help me
+    understand " in the composer and focuses it instead of sending) / Show
+    me BFS on a graph with a visual.
+  The struggling-course suggestion is kept. Other suggestions send exactly
+  as before (`vm.inputText` + `sendMessage()`).
+- Messages: user bubbles use the school accent with `.body` text; an
+  attachment's "📎 name" line shows as a paperclip chip. Advisor answers get
+  a small "Advisor" label and render with `MarkdownBody` at `.body` size
+  (was `.subheadline`).
+- Truncation/interruption: the notes `ChatViewModel` appends are still stored
+  and sent unchanged; the bubble strips them only for display and shows
+  "Answer was cut off. Ask to continue." or "Answer interrupted before it
+  finished." labels. Continue chip is now a filled school-accent capsule.
+- Loading: typing indicator is accent dots plus "Thinking" (VoiceOver:
+  "Advisor is responding"). Streaming cursor uses the accent.
+- Errors: banner text is primary-colored and wraps; the draft-restore logic
+  is unchanged.
+- Composer: placeholder "Ask about your degree or a course", `.body` font,
+  accent cursor and send button, 44pt send target, red over-limit message.
+  Attachment menu rows and chip use the school accent; remove button 32pt
+  with a VoiceOver label. The microphone button is still the existing
+  placeholder (no voice input); decide whether to remove it.
+- History sheet: school accent, serif empty-state title, 44pt controls,
+  titles up to three lines, date and count on one wrapping line.
+
+`ContentView.swift`: graph diagrams and step controls use `theme.accent`
+(path/highlight) and `theme.secondaryAccent` (current node), which are the
+same VT maroon/orange as before; highlighted node text uses `onAccent`. The
+YouTube resource card icon uses the accent.
+
+Debug QA: `-HokieVisualQAChat` (with `-HokieVisualQA`) loads a long sample
+conversation: lists, long display math, inline math, a four-step graph, a
+code block, an attachment, and cut-off and interrupted answers.
+`-HokieVisualQAChatError` adds an error banner; `-HokieVisualQAKeyboard`
+focuses the composer.
+
+Verified on the iPhone 18 Pro simulator: empty state with and without a
+transcript (light/dark/Accessibility XL); long conversation in light and
+dark (wide equation scrolls horizontally inside its card, graph stepper,
+code block, attachment chip, status labels); error banner; Accessibility XL
+conversation; composer focus.
+
+Not verified: the on-screen keyboard layout (the simulator uses a hardware
+keyboard, so no software keyboard appears; the keyboard-avoidance code is
+unchanged), the Continue chip (it only appears after a live streamed answer
+stops at the length limit), live streaming, and real attachment picking.
