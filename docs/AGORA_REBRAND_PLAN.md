@@ -128,13 +128,13 @@ carries advisor phases 1–7 not yet on `main`). Started November 5, 2026.
 - [x] Phase 1: `AgoraBrand` + semantic theme tokens + `SchoolTheme` environment
 - [x] Phase 2: background, glass, header, tab bar, icon tiles, pills
 - [x] Phase 3a: Welcome screen, school picker, signed-out flow, Login restyle
-- [ ] Phase 3b: Onboarding step screens (buttons, tiles, "Let's Go, Hokies!" pending decision 3)
+- [x] Phase 3b: Onboarding step screens (buttons, tiles, community-name button)
 - [x] Phase 4: Home and Audit/DARS (redesign, tokens, copy)
 - [x] Phase 5: Advisor chat (bubbles, composer, graph/step tints; math/code untouched)
-- [ ] Phase 6: Profile/Settings (footer, Terms, Privacy, policies row)
+- [x] Phase 6: Profile/Settings, Help & FAQ, Transcript/Tutoring/Memory/Legal sheets
 - [x] Phase 7a: `CFBundleDisplayName = Agora`, camera/photo usage strings
 - [ ] Phase 7b: asset catalog with real wordmark, icon (if approved)
-- [ ] Build passes after each phase (phases 1–5, 7a: passed)
+- [ ] Build passes after each phase (phases 1–6, 7a: passed)
 - [ ] Visual QA light/dark on all four tabs + login/onboarding
 - [ ] Signed-in regression smoke test
 - [ ] Grep confirms no user-facing "Hokie Advisor" left in iOS; internal ids unchanged
@@ -394,3 +394,89 @@ Not verified: the on-screen keyboard layout (the simulator uses a hardware
 keyboard, so no software keyboard appears; the keyboard-avoidance code is
 unchanged), the Continue chip (it only appears after a live streamed answer
 stops at the length limit), live streaming, and real attachment picking.
+
+### Stage 5 — Profile, Help & FAQ, remaining screens (phases 3b, 6)
+
+Account, transcript, privacy, appearance, memory, sign-out, Clear Local Data,
+and Reset Account logic is unchanged (`resetAccount`, `signOut`,
+`clearLocalAccountData`, profile sync, `ChatHistoryStore`). Stored keys
+(`vtPID`, `vtEmail`, …) are not renamed.
+
+School labels from existing configuration: `SchoolTheme` gains
+`studentIDLabel` ("PID") and `communityName` ("Hokie"), matching
+`institutions.student_id_label` and `branding.community_name` in the 005 VT
+seed.
+
+Profile (`SettingsView.swift`):
+
+- Header: school eyebrow, "Your school, records, and account."
+- Card: avatar in school accent (person icon when no name; the old "HK"
+  placeholder is gone), editable name in serif, email, GPA.
+- "School & Program" group: School, Program (read-only; not editable in the
+  app), PID (label from theme; shown when set), editable Grad Year.
+- Transcript row now opens the existing Transcript sheet when a transcript
+  exists too, so students can review courses and re-upload (previously the
+  row was inert once imported).
+- Groups reordered: School & Program, Transcript, Chat Memory, Appearance,
+  Help & About, Account. Section titles are headers for VoiceOver; rows are
+  at least 52pt and stack label/value at accessibility sizes.
+- New "Help & FAQ" row opens `HelpView`.
+- Clear Local Data alert title now matches its row (was "Clear All Data").
+
+`HelpView.swift` (new): collapsible FAQ. Every answer was checked against code:
+
+- Schools: built from `SchoolTheme.supported`; transcript estimate is CS B.S.
+  only (audit engine), DARS import and advisor available otherwise.
+- Transcript import: Profile/Home/Degree Progress entry points; PDF/PNG/JPEG
+  (`TranscriptView` file importer); AI extraction on the server.
+- DARS import: PDF/PNG/JPEG; replace/remove; takes priority when on file.
+- Review/correct: review and re-upload in Transcript (replaces previous
+  import); current-class status; name and grad year editable; individual
+  courses and program not editable; DARS replace/remove.
+- Advisor can: context sent per `ChatRequest` (transcript, in-progress
+  courses, program, memories); attachments per `ChatAttachmentProcessor`
+  (photos compressed, text PDFs up to 30 pages, text files).
+- Advisor can't: no school-system access, AI can be wrong, scanned PDFs not
+  read, no voice input.
+- Saved chats: auto-save, history reopen/delete; attachment bytes not stored.
+- Memories: manual add, recurring-topic capture, model-extracted facts;
+  edit/delete/delete all; synced deletes when signed in
+  (`syncDeleteMemory`).
+- Account and data: Sign Out keeps account data; Clear Local Data is
+  device-only (`ChatHistoryStore.deleteAll` does not sync deletes); Reset
+  Account deletes the auth user via the `account` function, and user-owned
+  rows cascade (README). The FAQ does not claim deletion of uploaded files in
+  Storage, since the `account` function only deletes the auth user; verify
+  Storage cleanup separately.
+
+No support contact, privacy promise, integration, or endorsement was added.
+
+Branding replaced: "Hokie Advisor" → "Agora" in Terms and Privacy (product
+name only) and the legal sheet subtitle; Privacy's deletion paths now name the
+real controls ("Profile → Clear Local Data", "Profile → Reset Account &
+Restart"). Onboarding's final button reads "Let's go, Hokies!" from
+`communityName` (plain "Let's go" without a school). VT terms (PID, @vt.edu,
+DARS, Pathways, Virginia Tech resources) are kept.
+
+Remaining screens moved from VT constants to the school theme: Transcript
+sheet, onboarding steps (option tiles, appearance tiles, primary buttons now
+`.agoraPrimary`), Tutoring sheet and resource cards, Chat Memory editor,
+Legal sheet. No `.vtBurgundy` / `.vtOrange` uses remain outside their
+definitions; `hokieStone` stays as a neutral gray for "not started" status.
+
+Debug QA: `-HokieOpenProfileSheet help|memories|transcript|terms|privacy`
+opens that sheet; `-HokieExpandFAQ` expands all answers.
+
+Verified on the iPhone 18 Pro simulator: Profile with and without a
+transcript (light, dark, Accessibility XL), Help & FAQ collapsed and expanded
+(light, dark), Chat Memory editor, Transcript sheet with data, Terms sheet.
+
+Not verified by tapping: Sign Out, Clear Local Data, Reset Account (their
+code is unchanged; Reset would delete a real account), memory add/edit/delete,
+grad-year editing. Known limitation: at Accessibility XL a long name
+truncates in the single-line name field.
+
+Needs owner review (decision 4): Terms/Privacy still say "Last updated: May
+2026", describe Agora as "an independent student project", and Privacy's
+Contact line points to "the Virginia Tech CS department", which is not an
+Agora support channel. Only the product name and control names were changed.

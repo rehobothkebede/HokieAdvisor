@@ -120,6 +120,10 @@ struct SchoolTheme: Equatable {
     let accentDeep: Color
     let onAccent: Color
     let secondaryAccent: Color
+    /// `institutions.student_id_label` in migration 005, e.g. "PID".
+    let studentIDLabel: String?
+    /// `branding.community_name` in migration 005, e.g. "Hokie".
+    let communityName: String?
 
     var isSchool: Bool { slug != nil }
 
@@ -130,7 +134,9 @@ struct SchoolTheme: Equatable {
         accent: Color(light: 0x1B2A41, dark: 0xD08C5C),
         accentDeep: Color(light: 0x101A2B, dark: 0xB06A3B),
         onAccent: Color(light: 0xF7F2E8, dark: 0x101A2B),
-        secondaryAccent: AgoraPalette.copper
+        secondaryAccent: AgoraPalette.copper,
+        studentIDLabel: nil,
+        communityName: nil
     )
 
     // Values match the VT `branding` seed in migration 005; dark mode lifts the
@@ -142,7 +148,9 @@ struct SchoolTheme: Equatable {
         accent: Color(light: 0x861F41, dark: 0xA3325A),
         accentDeep: Color(light: 0x501027, dark: 0x861F41),
         onAccent: .white,
-        secondaryAccent: Color(hex: 0xE5751F)
+        secondaryAccent: Color(hex: 0xE5751F),
+        studentIDLabel: "PID",
+        communityName: "Hokie"
     )
 
     /// Schools Agora actually supports. Only add a school here once its

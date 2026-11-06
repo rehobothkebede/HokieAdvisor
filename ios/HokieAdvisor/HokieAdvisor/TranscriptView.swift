@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TranscriptView: View {
+    @Environment(\.schoolTheme) private var theme
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = TranscriptViewModel()
@@ -79,7 +80,7 @@ struct TranscriptView: View {
             eyebrow: "Course record",
             subtitle: "Upload once, then let the app read your academic path.",
             symbol: "doc.text.fill",
-            accent: .vtOrange,
+            accent: theme.accent,
             stat: transcriptHeaderStat
         ) {
             Button { dismiss() } label: {
@@ -110,7 +111,7 @@ struct TranscriptView: View {
                 vm.reset(); showFilePicker = true
             } label: {
                 HStack(spacing: 16) {
-                    HokieIconTile(symbol: "arrow.up.doc.fill", color: .vtBurgundy, size: 58)
+                    HokieIconTile(symbol: "arrow.up.doc.fill", color: theme.accent, size: 58)
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Upload Transcript")
@@ -124,7 +125,7 @@ struct TranscriptView: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.headline.weight(.black))
-                        .foregroundStyle(Color.vtOrange.opacity(0.8))
+                        .foregroundStyle(theme.secondaryAccent.opacity(0.8))
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity)
@@ -144,7 +145,7 @@ struct TranscriptView: View {
 
     private func featureRow(icon: String, text: String) -> some View {
         HStack(spacing: 14) {
-            circleIcon(icon, color: .vtBurgundy, size: 38)
+            circleIcon(icon, color: theme.accent, size: 38)
             Text(text).font(.subheadline).foregroundStyle(.secondary)
         }
     }
@@ -156,7 +157,7 @@ struct TranscriptView: View {
                 Text(title).font(.body.bold())
             }
             .frame(maxWidth: .infinity).padding(.vertical, 18)
-            .foregroundStyle(Color.vtBurgundy)
+            .foregroundStyle(theme.accent)
             .glassCapsule(strokeOpacity: 0.08)
         }
         .buttonStyle(.plain)
@@ -177,7 +178,7 @@ struct TranscriptView: View {
                 Image(systemName: "arrow.triangle.2.circlepath").font(.subheadline.bold())
                 Text("Re-upload Transcript").font(.subheadline.bold())
             }
-            .foregroundStyle(Color.vtBurgundy)
+            .foregroundStyle(theme.accent)
             .frame(maxWidth: .infinity).padding(.vertical, 16)
             .glassCapsule(strokeOpacity: 0.08)
         }
@@ -242,10 +243,10 @@ struct TranscriptView: View {
                 HStack(spacing: 10) {
                     Text(course.code)
                         .font(.caption.weight(.black))
-                        .foregroundStyle(Color.vtOrange)
+                        .foregroundStyle(theme.secondaryAccent)
                         .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Color.vtOrange.opacity(0.12), in: Capsule())
-                        .overlay(Capsule().stroke(Color.vtOrange.opacity(0.18), lineWidth: 1))
+                        .background(theme.secondaryAccent.opacity(0.12), in: Capsule())
+                        .overlay(Capsule().stroke(theme.secondaryAccent.opacity(0.18), lineWidth: 1))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(course.name).font(.subheadline.bold()).lineLimit(1)
                         if let sem = course.semester {
@@ -271,10 +272,10 @@ struct TranscriptView: View {
             HStack(spacing: 8) {
                 Text(course.code)
                     .font(.caption.weight(.black))
-                    .foregroundStyle(Color.vtBurgundy)
+                    .foregroundStyle(theme.accent)
                     .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Color.vtBurgundy.opacity(0.12), in: Capsule())
-                    .overlay(Capsule().stroke(Color.vtBurgundy.opacity(0.18), lineWidth: 1))
+                    .background(theme.accent.opacity(0.12), in: Capsule())
+                    .overlay(Capsule().stroke(theme.accent.opacity(0.18), lineWidth: 1))
                 Text(course.name).font(.subheadline.bold()).lineLimit(1)
             }
             HStack(spacing: 8) {
@@ -310,7 +311,7 @@ struct TranscriptView: View {
 
     private var semesterStatusSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionLabel(title: "Current Semester", icon: "calendar", color: .vtBurgundy)
+            SectionLabel(title: "Current Semester", icon: "calendar", color: theme.accent)
 
             Text("How are your current classes going?")
                 .font(.subheadline).foregroundStyle(.secondary)
@@ -377,9 +378,9 @@ struct TranscriptView: View {
                             }
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .foregroundStyle(Color.vtOrange)
-                        .background(Color.vtOrange.opacity(0.12), in: Capsule())
-                        .overlay(Capsule().stroke(Color.vtOrange.opacity(0.18), lineWidth: 1))
+                        .foregroundStyle(theme.secondaryAccent)
+                        .background(theme.secondaryAccent.opacity(0.12), in: Capsule())
+                        .overlay(Capsule().stroke(theme.secondaryAccent.opacity(0.18), lineWidth: 1))
                     }
                 }
             }
@@ -396,7 +397,7 @@ struct TranscriptView: View {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
                         .foregroundStyle(newStrugglingCourse.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? Color.hokieStone.opacity(0.45) : Color.vtOrange)
+                            ? Color.hokieStone.opacity(0.45) : theme.secondaryAccent)
                 }
                 .disabled(newStrugglingCourse.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -422,7 +423,7 @@ struct TranscriptView: View {
 
     private var courseListSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionLabel(title: "Completed Courses", icon: "checkmark.circle.fill", color: .vtBurgundy)
+            SectionLabel(title: "Completed Courses", icon: "checkmark.circle.fill", color: theme.accent)
 
             ForEach(appState.semesterGroups) { group in
                 VStack(alignment: .leading, spacing: 8) {
@@ -535,6 +536,7 @@ struct FlowLayout: Layout {
 // MARK: - Transcript Course Card
 
 struct TranscriptCourseCard: View {
+    @Environment(\.schoolTheme) private var theme
     let course: TranscriptCourse
 
     var body: some View {
@@ -543,10 +545,10 @@ struct TranscriptCourseCard: View {
                 HStack(spacing: 8) {
                     Text(course.code)
                         .font(.caption.weight(.black))
-                        .foregroundStyle(Color.vtBurgundy)
+                        .foregroundStyle(theme.accent)
                         .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Color.vtBurgundy.opacity(0.12), in: Capsule())
-                        .overlay(Capsule().stroke(Color.vtBurgundy.opacity(0.18), lineWidth: 1))
+                        .background(theme.accent.opacity(0.12), in: Capsule())
+                        .overlay(Capsule().stroke(theme.accent.opacity(0.18), lineWidth: 1))
 
                     if let grade = course.grade {
                         let badgeColor = gradeColor(grade)
@@ -575,7 +577,7 @@ struct TranscriptCourseCard: View {
         case "A-", "B+", "B": return Color(red: 0.2, green: 0.6, blue: 0.2)
         case "B-", "C+", "C": return .orange
         case "C-", "D+", "D", "D-": return .red.opacity(0.8)
-        case "P", "CR", "TR", "T": return Color.vtBurgundy
+        case "P", "CR", "TR", "T": return theme.accent
         default: return .gray
         }
     }

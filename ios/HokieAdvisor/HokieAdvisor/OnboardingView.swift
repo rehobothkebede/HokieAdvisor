@@ -97,7 +97,7 @@ struct OnboardingView: View {
                 .padding(.horizontal, 28)
 
                 VStack(spacing: 10) {
-                    featurePill("doc.text.fill", color: .vtBurgundy, text: "Transcript-powered course planning")
+                    featurePill("doc.text.fill", color: theme.accent, text: "Transcript-powered course planning")
                     featurePill("brain.head.profile", color: .blue, text: "AI advisor, always available")
                     featurePill("checkmark.seal.fill", color: .green, text: "Degree audit at a glance")
                 }
@@ -114,7 +114,7 @@ struct OnboardingView: View {
 
     private var nameStep: some View {
         let trimmed = nameInput.trimmingCharacters(in: .whitespaces)
-        return stepShell(icon: "person.fill", iconColor: .vtBurgundy,
+        return stepShell(icon: "person.fill", iconColor: theme.accent,
                   title: "What's your name?",
                   subtitle: "We'll use this to personalise your experience.",
                   canProceed: !trimmed.isEmpty,
@@ -208,21 +208,21 @@ struct OnboardingView: View {
                             let selected = howHeardSelection == label
                             Image(systemName: icon)
                                 .font(.body.bold())
-                                .foregroundStyle(selected ? .white : Color.vtBurgundy)
+                                .foregroundStyle(selected ? theme.onAccent : theme.accent)
                                 .frame(width: 38, height: 38)
-                                .background(selected ? Color.vtBurgundy : Color.vtBurgundy.opacity(0.1))
+                                .background(selected ? theme.accent : theme.accent.opacity(0.1))
                                 .clipShape(Circle())
                             Text(label).font(.subheadline.bold()).foregroundStyle(.primary)
                             Spacer()
                             if selected {
-                                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.vtBurgundy)
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.accent)
                             }
                         }
                         .padding(16)
                         .glassSurface(cornerRadius: 20)
                         .overlay(
                             RoundedRectangle(cornerRadius: 20)
-                                .stroke(howHeardSelection == label ? Color.vtBurgundy : Color.clear, lineWidth: 2)
+                                .stroke(howHeardSelection == label ? theme.accent : Color.clear, lineWidth: 2)
                         )
                     }
                 }
@@ -257,21 +257,21 @@ struct OnboardingView: View {
                             let selected = appearanceMode == opt.tag
                             Image(systemName: opt.icon)
                                 .font(.body.bold())
-                                .foregroundStyle(selected ? .white : Color.vtBurgundy)
+                                .foregroundStyle(selected ? theme.onAccent : theme.accent)
                                 .frame(width: 38, height: 38)
-                                .background(selected ? Color.vtBurgundy : Color.vtBurgundy.opacity(0.1))
+                                .background(selected ? theme.accent : theme.accent.opacity(0.1))
                                 .clipShape(Circle())
                             Text(opt.label).font(.subheadline.bold()).foregroundStyle(.primary)
                             Spacer()
                             if selected {
-                                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.vtBurgundy)
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.accent)
                             }
                         }
                         .padding(16)
                         .glassSurface(cornerRadius: 20)
                         .overlay(
                             RoundedRectangle(cornerRadius: 20)
-                                .stroke(appearanceMode == opt.tag ? Color.vtBurgundy : Color.clear, lineWidth: 2)
+                                .stroke(appearanceMode == opt.tag ? theme.accent : Color.clear, lineWidth: 2)
                         )
                     }
                 }
@@ -287,11 +287,11 @@ struct OnboardingView: View {
             VStack(spacing: 28) {
                 ZStack {
                     Circle()
-                        .fill(appState.hasTranscript ? Color.green.opacity(0.12) : Color.vtBurgundy.opacity(0.1))
+                        .fill(appState.hasTranscript ? Color.green.opacity(0.12) : theme.accent.opacity(0.1))
                         .frame(width: 110, height: 110)
                     Image(systemName: appState.hasTranscript ? "checkmark.circle.fill" : "doc.text.fill")
                         .font(.system(size: 48, weight: .semibold))
-                        .foregroundStyle(appState.hasTranscript ? Color.green : Color.vtBurgundy)
+                        .foregroundStyle(appState.hasTranscript ? Color.green : theme.accent)
                 }
                 .animation(.spring(response: 0.4, dampingFraction: 0.7), value: appState.hasTranscript)
 
@@ -313,7 +313,7 @@ struct OnboardingView: View {
                             Text("Import Transcript").font(.body.bold())
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 18)
-                        .foregroundStyle(Color.vtBurgundy)
+                        .foregroundStyle(theme.accent)
                         .glassCapsule(strokeOpacity: 0.08)
                     }
                     .buttonStyle(.plain)
@@ -343,7 +343,7 @@ struct OnboardingView: View {
             VStack(spacing: 28) {
                 HokieIconTile(
                     symbol: hasTranscript ? "checkmark" : "doc.text.fill",
-                    color: hasTranscript ? .vtBurgundy : .vtOrange,
+                    color: hasTranscript ? theme.accent : theme.secondaryAccent,
                     size: 120
                 )
 
@@ -365,14 +365,14 @@ struct OnboardingView: View {
                         completionPill("arrow.up.doc.fill", color: .orange,
                                        text: "Add your transcript in the Profile tab")
                     }
-                    completionPill("brain.head.profile", color: .vtBurgundy, text: "Advisor ready to help")
-                    completionPill("wand.and.stars", color: .vtBurgundy, text: "Generate your first course plan")
+                    completionPill("brain.head.profile", color: theme.accent, text: "Advisor ready to help")
+                    completionPill("wand.and.stars", color: theme.accent, text: "Generate your first course plan")
                 }
                 .padding(.horizontal, 12)
             }
             .padding(.horizontal, 28)
             Spacer()
-            bigButton("Let's Go, Hokies!") { completeOnboarding() }
+            bigButton(theme.communityName.map { "Let's go, \($0)s!" } ?? "Let's go") { completeOnboarding() }
                 .padding(.horizontal, 32).padding(.bottom, 48)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -435,14 +435,9 @@ struct OnboardingView: View {
     }
 
     private func bigButton(_ title: String, enabled: Bool = true, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.body.bold())
-                .frame(maxWidth: .infinity).padding(.vertical, 18)
-                .foregroundStyle(enabled ? Color.vtBurgundy : Color(.tertiaryLabel))
-                .glassCapsule(strokeOpacity: enabled ? 0.08 : 0.04)
-        }
-        .disabled(!enabled)
-        .buttonStyle(.plain)
+        Button(title, action: action)
+            .buttonStyle(.agoraPrimary)
+            .disabled(!enabled)
         .animation(.easeInOut(duration: 0.2), value: enabled)
     }
 

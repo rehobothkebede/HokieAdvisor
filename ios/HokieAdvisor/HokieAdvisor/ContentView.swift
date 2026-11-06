@@ -1024,6 +1024,7 @@ final class TutoringViewModel: ObservableObject {
 // MARK: - Tutoring Sheet
 
 struct TutoringSheet: View {
+    @Environment(\.schoolTheme) private var theme
     @ObservedObject var vm: TutoringViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -1043,7 +1044,7 @@ struct TutoringSheet: View {
                             }
                             if !response.resources.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    SectionLabel(title: "Resources", icon: "building.columns.fill", color: .vtBurgundy)
+                                    SectionLabel(title: "Resources", icon: "building.columns.fill", color: theme.accent)
                                     ForEach(response.resources) { TutoringResourceCard(resource: $0) }
                                 }
                             }
@@ -1054,7 +1055,7 @@ struct TutoringSheet: View {
                                         ForEach(response.tips, id: \.self) { tip in
                                             HStack(alignment: .top, spacing: 10) {
                                                 Image(systemName: "checkmark.circle.fill")
-                                                    .foregroundStyle(Color.vtBurgundy)
+                                                    .foregroundStyle(theme.accent)
                                                     .font(.footnote).padding(.top, 2)
                                                 Text(tip.markdown).font(.subheadline)
                                                     .fixedSize(horizontal: false, vertical: true)
@@ -1083,12 +1084,12 @@ struct TutoringSheet: View {
                     title: "Academic Support",
                     subtitle: "Tutoring, resources, and next steps",
                     symbol: "lifepreserver.fill",
-                    accent: .vtBurgundy
+                    accent: theme.accent
                 ) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(Color.vtBurgundy)
+                            .foregroundStyle(theme.accent)
                             .frame(width: 34, height: 34)
                             .glassCircle(strokeOpacity: 0.08)
                     }
@@ -1103,6 +1104,7 @@ struct TutoringSheet: View {
 }
 
 struct TutoringResourceCard: View {
+    @Environment(\.schoolTheme) private var theme
     let resource: TutoringResource
 
     private var typeIcon: String {
@@ -1119,7 +1121,7 @@ struct TutoringResourceCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            circleIcon(typeIcon, color: .vtBurgundy)
+            circleIcon(typeIcon, color: theme.accent)
             VStack(alignment: .leading, spacing: 4) {
                 Text(resource.name).font(.subheadline.bold())
                 Text(resource.description).font(.caption).foregroundStyle(.secondary)
