@@ -129,12 +129,12 @@ carries advisor phases 1–7 not yet on `main`). Started November 5, 2026.
 - [x] Phase 2: background, glass, header, tab bar, icon tiles, pills
 - [x] Phase 3a: Welcome screen, school picker, signed-out flow, Login restyle
 - [ ] Phase 3b: Onboarding step screens (buttons, tiles, "Let's Go, Hokies!" pending decision 3)
-- [ ] Phase 4: Home and Audit/DARS (tokens + copy)
+- [x] Phase 4: Home and Audit/DARS (redesign, tokens, copy)
 - [ ] Phase 5: Advisor chat (bubbles, composer, graph/step tints; math/code untouched)
 - [ ] Phase 6: Profile/Settings (footer, Terms, Privacy, policies row)
 - [x] Phase 7a: `CFBundleDisplayName = Agora`, camera/photo usage strings
 - [ ] Phase 7b: asset catalog with real wordmark, icon (if approved)
-- [ ] Build passes after each phase (phases 1–3a, 7a: passed)
+- [ ] Build passes after each phase (phases 1–4, 7a: passed)
 - [ ] Visual QA light/dark on all four tabs + login/onboarding
 - [ ] Signed-in regression smoke test
 - [ ] Grep confirms no user-facing "Hokie Advisor" left in iOS; internal ids unchanged
@@ -261,3 +261,69 @@ Verified on the iPhone 18 Pro simulator after a successful build:
 Not verified: tapping through Welcome → picker → Login (no simulator tap
 automation available; Simulator runs headless), and a real Supabase sign-in.
 The session-restore path in `restoreSession()` is unchanged.
+
+### Stage 3 — Home and Degree Progress (phase 4)
+
+Data sources, calculations, and actions are unchanged: GPA/credits from
+`AppState`, transcript audit via `DegreeAuditViewModel.runAudit`, DARS via
+`DarsAuditViewModel.upload`, caches from `appState.latestDegreeAudit` /
+`latestDarsAudit`, tutoring sheet, refresh, DARS import/replace/remove.
+
+Home (`HomeView.swift`, rewritten layout):
+
+- Header: time-of-day greeting with first name; eyebrow is the school;
+  subtitle is the program (latest audit's major + degree, else profile major)
+  and "Class of <year>" when set.
+- "Next step" card, chosen from real state only: no transcript → import
+  transcript (opens the same `TranscriptView` sheet Profile uses); transcript
+  but no audit yet → open Degree Progress; audit with "attention" groups →
+  review those; remaining groups → review remaining; all groups complete →
+  confirm with official audit and advisor (no graduation promise).
+- Degree progress card (only when an audit exists): percent, credits, groups,
+  and a source note ("Estimated from your transcript", plus DARS prepared
+  date when on file).
+- "From your transcript" stats (credits, GPA, courses, grad year) appear only
+  with a transcript; no placeholder numbers. GPA icon keeps its grade-band
+  color. One column at accessibility text sizes.
+- Advisor entry point kept. VT tips now titled "Tips for Virginia Tech" and
+  shown only for VT students (resolves decision 3 for Home; onboarding's
+  "Let's Go, Hokies!" is still pending).
+
+Degree Progress (`DegreeAuditView` in `ContentView.swift`):
+
+- Title "Degree Progress"; eyebrow is the school; subtitle is the program
+  from the DARS audit, else the transcript audit, else the profile major.
+- With an official DARS audit on file it leads; otherwise the transcript
+  estimate leads. Both stay on the screen.
+- "Transcript estimate": source line "Estimated by Agora from your imported
+  transcript", "Updated <time>" only when calculated this session (new
+  `DegreeAuditViewModel.calculatedAt`; restored caches have no timestamp in
+  the app, so none is shown), and a note that DARS takes priority when both
+  exist. Summary card shows program, school, catalog year.
+- Requirement groups: Needs attention / Remaining (all, previously capped at
+  14) / Completed (all, collapsible, previously capped at 8). DARS sections
+  are no longer capped at 12.
+- "Official audit (DARS)": import/replace/remove kept; loaded subtitle shows
+  only real fields (prepared date, file name). Summary adds school, catalog
+  pill, and the audit's graduation term when present. Status colors for
+  complete / in progress / open / planned are unchanged.
+- Empty state (no transcript, no DARS): explains both sources, states that
+  transcript estimates cover the Computer Science B.S. only, and offers
+  "Import transcript" and "Import DARS audit" buttons.
+- No "verified" labels, confidence scores, or graduation guarantees.
+
+Shared: `HokiePageHeader` title now scales with Dynamic Type (capped at 52pt,
+wraps to two lines) and its stat row stacks when it doesn't fit.
+
+Debug QA: `-HokieVisualQAEmpty` (with `-HokieVisualQA`) signs in the sample
+student without transcript data, for empty states.
+
+Verified on the iPhone 18 Pro simulator: Home and Degree Progress, populated
+and empty, light and dark; both at Accessibility XL text. Bottom inset
+(`HokieChrome.contentBottomInset`) kept on both screens.
+
+Not verified: a loaded DARS audit (no sample DARS exists in QA mode; layout
+built from the same cards), scrolled-to-bottom positions (no simulator scroll
+automation), and Home's degree-progress card in QA mode (the sample audit
+only loads when the Audit tab opens; in real use it also comes from the
+Supabase restore).

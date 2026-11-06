@@ -267,6 +267,14 @@ struct HokieAdvisorApp: App {
         defaults.set("2029", forKey: "graduationYear")
 
         appState.major = "Computer Science"
+
+        // `-HokieVisualQAEmpty` keeps the signed-in student but skips academic data,
+        // for checking empty states.
+        if ProcessInfo.processInfo.arguments.contains("-HokieVisualQAEmpty") {
+            appState.hasTranscript = false
+            return
+        }
+
         appState.hasTranscript = true
         appState.transcriptCourses = [
             TranscriptCourse(code: "CS 1114", name: "Introduction to Software Design", credits: 3, grade: "A", semester: "Fall 2025"),

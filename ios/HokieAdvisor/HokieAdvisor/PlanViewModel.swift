@@ -6,10 +6,13 @@ final class DegreeAuditViewModel: ObservableObject {
     @Published var audit: DegreeAuditResponse? = nil
     @Published var isAuditLoading: Bool = false
     @Published var auditErrorMessage: String? = nil
+    /// When this session last calculated the audit; `nil` for a restored cached audit.
+    @Published var calculatedAt: Date? = nil
 
     #if DEBUG
     func loadVisualQASampleAudit(major: String) {
         audit = DegreeAuditResponse.visualQASample(major: major)
+        calculatedAt = Date()
         auditErrorMessage = nil
         isAuditLoading = false
     }
@@ -31,6 +34,7 @@ final class DegreeAuditViewModel: ObservableObject {
 
         do {
             audit = try await APIService.fetchDegreeAudit(request: body)
+            calculatedAt = Date()
         } catch {
             auditErrorMessage = error.localizedDescription
         }

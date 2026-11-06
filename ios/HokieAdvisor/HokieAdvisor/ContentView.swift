@@ -226,6 +226,8 @@ struct HokieHeaderStat {
 }
 
 struct HokiePageHeader<Trailing: View>: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 34
+
     let title: String
     let eyebrow: String
     let subtitle: String
@@ -254,15 +256,15 @@ struct HokiePageHeader<Trailing: View>: View {
                             .foregroundStyle(accent)
 
                         Text(title)
-                            .font(.agoraDisplay(34))
+                            .font(.agoraDisplay(min(titleSize, 52)))
                             .foregroundStyle(AgoraPalette.brandInk)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Text(subtitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -270,32 +272,40 @@ struct HokiePageHeader<Trailing: View>: View {
                     trailing()
                 }
 
-                HStack(spacing: 9) {
-                    HokieSignalTrack(accent: accent)
-                        .frame(maxWidth: 118)
-
-                    if let stat {
-                        HStack(spacing: 7) {
-                            Image(systemName: stat.icon)
-                                .font(.caption.weight(.semibold))
-                            Text(stat.value)
-                                .font(.caption.weight(.bold))
-                            Text(stat.label)
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(AgoraPalette.surfaceInset, in: Capsule())
-                        .overlay(Capsule().stroke(AgoraPalette.stroke, lineWidth: 1))
-                    }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 9) { signalRow }
+                    VStack(alignment: .leading, spacing: 9) { signalRow }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 8)
+    }
+}
+
+extension HokiePageHeader {
+    @ViewBuilder
+    fileprivate var signalRow: some View {
+        HokieSignalTrack(accent: accent)
+            .frame(maxWidth: 118)
+
+        if let stat {
+            HStack(spacing: 7) {
+                Image(systemName: stat.icon)
+                    .font(.caption.weight(.semibold))
+                Text(stat.value)
+                    .font(.caption.weight(.bold))
+                Text(stat.label)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.primary)
+            .fixedSize()
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(AgoraPalette.surfaceInset, in: Capsule())
+            .overlay(Capsule().stroke(AgoraPalette.stroke, lineWidth: 1))
+        }
     }
 }
 
@@ -588,11 +598,14 @@ struct FloatingTabBar: View {
 
 struct DegreeAuditView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.schoolTheme) private var theme
     @StateObject private var vm = DegreeAuditViewModel()
     @StateObject private var darsVM = DarsAuditViewModel()
     @StateObject private var tutoringVM = TutoringViewModel()
     @State private var showTutoringSheet = false
     @State private var showDarsImporter = false
+    @State private var showTranscriptImport = false
+    @State private var showCompletedBuckets = false
     @State private var scrollOffset: CGFloat = 0
 
     private var compactTitleProgress: CGFloat {
@@ -602,23 +615,31 @@ struct DegreeAuditView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: AgoraSpacing.xl) {
                     auditHeader
-                        .padding(.horizontal, 20)
-                        .padding(.top, 12)
-                    darsImportSection.padding(.horizontal, 20)
-                    transcriptStatusCard.padding(.horizontal, 20)
-                    if appState.hasTranscript {
-                        auditSection.padding(.horizontal, 20)
-                        if appState.needsTutoringSupport {
-                            tutoringBanner.padding(.horizontal, 20)
+                        .padding(.top, AgoraSpacing.md)
+
+                    if !appState.hasTranscript && darsVM.audit == nil && !darsVM.isLoading {
+                        auditEmptyState
+                        if let error = darsVM.errorMessage {
+                            DarsBackendStatusCard(message: error)
                         }
+                    } else if darsVM.audit != nil {
+                        // An official audit on file is the stronger source, so it leads.
+                        officialAuditSection
+                        transcriptAuditSection
                     } else {
-                        auditEmptyState.padding(.horizontal, 20)
+                        transcriptAuditSection
+                        officialAuditSection
+                    }
+
+                    if appState.needsTutoringSupport {
+                        tutoringBanner
                     }
 
                     Spacer(minLength: HokieChrome.contentBottomInset)
                 }
+                .padding(.horizontal, AgoraSpacing.xl - 4)
             }
             .scrollIndicators(.hidden)
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -633,6 +654,9 @@ struct DegreeAuditView: View {
             .overlay(alignment: .top) { compactTitleOverlay }
         }
         .sheet(isPresented: $showTutoringSheet) { TutoringSheet(vm: tutoringVM) }
+        .sheet(isPresented: $showTranscriptImport) {
+            TranscriptView().environmentObject(appState)
+        }
         .fileImporter(
             isPresented: $showDarsImporter,
             allowedContentTypes: [.pdf, .png, .jpeg],
@@ -648,13 +672,13 @@ struct DegreeAuditView: View {
         }
     }
 
-    // MARK: Subviews
+    // MARK: Header
 
     private var compactTitleOverlay: some View {
         HokieCompactPill(
-            title: "Audit",
+            title: "Degree Progress",
             symbol: "checklist.checked",
-            accent: .vtBurgundy,
+            accent: theme.accent,
             progress: compactTitleProgress
         )
         .padding(.top, 8)
@@ -662,27 +686,70 @@ struct DegreeAuditView: View {
 
     private var auditHeader: some View {
         HokiePageHeader(
-            title: "Audit",
-            eyebrow: "Degree map",
-            subtitle: "DARS uploads, transcript checks, and requirement gaps in one lane.",
+            title: "Degree Progress",
+            eyebrow: theme.isSchool ? theme.name : AgoraBrand.name,
+            subtitle: programLine,
             symbol: "checklist.checked",
-            accent: .vtBurgundy,
+            accent: theme.accent,
             stat: auditHeaderStat
         )
     }
 
-    private var auditHeaderStat: HokieHeaderStat {
+    /// The student's program as the records name it: official audit first,
+    /// then the transcript audit, then the profile major.
+    private var programLine: String {
+        if let program = darsVM.audit?.program, !program.isEmpty {
+            return program
+        }
+        if let audit = vm.audit {
+            return "\(audit.major) \(audit.degree)"
+        }
+        return appState.major.isEmpty ? "Requirements, credits, and what's left." : appState.major
+    }
+
+    private var auditHeaderStat: HokieHeaderStat? {
         if darsVM.audit != nil {
-            return HokieHeaderStat(value: "DARS", label: "loaded", icon: "checkmark.seal.fill")
+            return HokieHeaderStat(value: "DARS", label: "on file", icon: "doc.text.fill")
         }
         if appState.hasTranscript {
             return HokieHeaderStat(value: "\(appState.transcriptCourses.count)", label: "courses", icon: "doc.text.fill")
         }
-        return HokieHeaderStat(value: "Import", label: "needed", icon: "arrow.up.doc.fill")
+        return nil
     }
 
-    private var darsImportSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    // MARK: Empty State
+
+    private var auditEmptyState: some View {
+        VStack(alignment: .leading, spacing: AgoraSpacing.md) {
+            Text("Your degree progress will appear here")
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Import your transcript and Agora estimates which requirement groups you've completed, including Pathways, electives, and retakes. Transcript estimates currently cover the Computer Science B.S.")
+                .font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("If you have your official DARS audit, import it too. It's the record your department uses.")
+                .font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Import transcript") { showTranscriptImport = true }
+                .buttonStyle(.agoraPrimary)
+                .padding(.top, AgoraSpacing.xs)
+            Button("Import DARS audit") {
+                darsVM.errorMessage = nil
+                showDarsImporter = true
+            }
+            .buttonStyle(.agoraSecondary)
+        }
+        .padding(AgoraSpacing.xl - 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(cornerRadius: AgoraRadius.card)
+    }
+
+    // MARK: Official Audit
+
+    private var officialAuditSection: some View {
+        VStack(alignment: .leading, spacing: AgoraSpacing.md) {
+            SectionLabel(title: "Official audit (DARS)", icon: "building.columns.fill", color: theme.accent)
+
             DarsHeroCard(
                 audit: darsVM.audit,
                 fileName: darsVM.importedFileName,
@@ -698,7 +765,7 @@ struct DegreeAuditView: View {
             )
 
             if darsVM.isLoading {
-                statusCard(icon: "hourglass", iconColor: .vtBurgundy,
+                statusCard(icon: "hourglass", iconColor: theme.accent,
                            title: "Reading audit",
                            subtitle: "Parsing the uploaded DARS/uAchieve file")
             }
@@ -730,27 +797,85 @@ struct DegreeAuditView: View {
         return "\(appState.major)|\(courses)|\(appState.inProgressCourses.map(\.code).joined(separator: ","))"
     }
 
-    private var transcriptStatusCard: some View {
-        Group {
-            if appState.hasTranscript {
-                statusCard(icon: "checkmark.circle.fill", iconColor: .green,
-                           title: "Computer Science B.S. audit",
-                           subtitle: "\(appState.transcriptCourses.count) courses · \(Int(appState.totalCredits)) imported credits")
-            } else {
-                statusCard(icon: "doc.badge.plus", iconColor: .vtBurgundy,
-                           title: "Import your transcript",
-                           subtitle: "Go to Profile → Transcript to unlock your CS degree audit")
+    // MARK: Transcript Audit
+
+    private var transcriptAuditSection: some View {
+        VStack(alignment: .leading, spacing: AgoraSpacing.md) {
+            HStack {
+                SectionLabel(title: "Transcript estimate", icon: "doc.text.fill", color: theme.accent)
+                Spacer()
+                if appState.hasTranscript {
+                    Button {
+                        Task { await refreshAudit() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.bold())
+                            .foregroundStyle(theme.accent)
+                            .frame(width: 44, height: 44)
+                            .glassCircle(strokeOpacity: 0.08)
+                    }
+                    .disabled(vm.isAuditLoading)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Recalculate transcript estimate")
+                }
+            }
+
+            if !appState.hasTranscript {
+                VStack(alignment: .leading, spacing: AgoraSpacing.md) {
+                    Text("Import your transcript to compare it with the official audit and see an Agora estimate for each requirement group.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Import transcript") { showTranscriptImport = true }
+                        .buttonStyle(.agoraSecondary)
+                }
+                .padding(AgoraSpacing.lg)
+                .glassSurface(cornerRadius: AgoraRadius.card)
+            } else if vm.isAuditLoading && vm.audit == nil {
+                statusCard(icon: "hourglass", iconColor: theme.accent,
+                           title: "Calculating", subtitle: "Checking your transcript against \(appState.major) requirements")
+            } else if let error = vm.auditErrorMessage {
+                statusCard(icon: "exclamationmark.triangle.fill", iconColor: .orange,
+                           title: "Estimate unavailable", subtitle: error)
+            } else if let audit = vm.audit {
+                AuditSummaryCard(
+                    audit: audit,
+                    schoolName: theme.isSchool ? theme.name : nil,
+                    source: transcriptSourceLine
+                )
+
+                if !audit.warnings.isEmpty {
+                    ForEach(audit.warnings, id: \.self) { WarningCard(text: $0) }
+                }
+
+                auditBucketGroup(title: "Needs attention", buckets: audit.buckets.filter { $0.status == "attention" })
+                auditBucketGroup(title: "Remaining", buckets: remainingBuckets(audit))
+                completedBucketGroup(audit.buckets.filter { $0.status == "complete" })
             }
         }
     }
 
+    private var transcriptSourceLine: String {
+        var line = "Estimated by Agora from your imported transcript"
+        if let calculatedAt = vm.calculatedAt {
+            line += " · Updated \(calculatedAt.formatted(date: .abbreviated, time: .shortened))"
+        }
+        if darsVM.audit != nil {
+            line += ". Where they differ, your official DARS audit takes priority."
+        }
+        return line
+    }
+
     private var tutoringBanner: some View {
         HStack(spacing: 14) {
-            circleIcon("lightbulb.fill", color: .orange)
+            Image(systemName: "lightbulb.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Academic Support Available").font(.subheadline.bold())
+                Text("Academic support available").font(.subheadline.weight(.semibold))
                 Text(appState.strugglingCourses.joined(separator: ", "))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             Button("View") {
@@ -761,81 +886,21 @@ struct DegreeAuditView: View {
                     showTutoringSheet = true
                 }
             }
-            .font(.caption.bold())
-            .foregroundStyle(Color.vtOrange)
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(theme.accent)
+            .padding(.horizontal, 16).padding(.vertical, 10)
             .glassCapsule(strokeOpacity: 0.08)
             .buttonStyle(.plain)
         }
         .padding(18)
-        .glassSurface(cornerRadius: 24)
-    }
-
-    private var auditSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                SectionLabel(title: "Audit Results", icon: "checklist.checked", color: .vtBurgundy)
-                Spacer()
-                Button {
-                    Task { await refreshAudit() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption.bold())
-                        .foregroundStyle(Color.vtBurgundy)
-                        .frame(width: 34, height: 34)
-                        .glassCircle(strokeOpacity: 0.08)
-                }
-                .disabled(vm.isAuditLoading)
-                .buttonStyle(.plain)
-            }
-
-            if vm.isAuditLoading && vm.audit == nil {
-                statusCard(icon: "hourglass", iconColor: .vtBurgundy,
-                           title: "Running audit", subtitle: "Checking transcript against CS degree requirements")
-            } else if let error = vm.auditErrorMessage {
-                statusCard(icon: "exclamationmark.triangle.fill", iconColor: .orange,
-                           title: "Audit unavailable", subtitle: error)
-            } else if let audit = vm.audit {
-                AuditSummaryCard(audit: audit)
-
-                if !audit.warnings.isEmpty {
-                    ForEach(audit.warnings, id: \.self) { WarningCard(text: $0) }
-                }
-
-                auditBucketGroup(title: "Needs Attention", buckets: audit.buckets.filter { $0.status == "attention" })
-                auditBucketGroup(title: "Remaining Requirements", buckets: auditBucketsToShow(audit))
-                auditBucketGroup(title: "Completed", buckets: Array(audit.buckets.filter { $0.status == "complete" }.prefix(8)))
-            }
-        }
-    }
-
-    private var auditEmptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "checklist.checked")
-                .font(.system(size: 46, weight: .semibold))
-                .foregroundStyle(Color.vtBurgundy.opacity(0.45))
-            Text("Your CS degree audit will appear here")
-                .font(.title3.bold()).fontDesign(.rounded)
-                .multilineTextAlignment(.center)
-            Text("Import a transcript and Hokie Advisor will check completed courses, retakes, Pathways, electives, and remaining CS requirements.")
-                .font(.subheadline).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .glassSurface(cornerRadius: 24)
+        .glassSurface(cornerRadius: AgoraRadius.card)
     }
 
     private func auditBucketGroup(title: String, buckets: [AuditBucket]) -> some View {
         Group {
             if !buckets.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(title)
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
+                    bucketGroupTitle("\(title) (\(buckets.count))")
                     ForEach(buckets) { bucket in
                         AuditBucketCard(bucket: bucket)
                     }
@@ -844,10 +909,45 @@ struct DegreeAuditView: View {
         }
     }
 
-    private func auditBucketsToShow(_ audit: DegreeAuditResponse) -> [AuditBucket] {
-        let priority = audit.buckets.filter { $0.status == "incomplete" }
-        let partial = audit.buckets.filter { $0.status == "in_progress" }
-        return Array((priority + partial).prefix(14))
+    private func completedBucketGroup(_ buckets: [AuditBucket]) -> some View {
+        Group {
+            if !buckets.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { showCompletedBuckets.toggle() }
+                    } label: {
+                        HStack {
+                            bucketGroupTitle("Completed (\(buckets.count))")
+                            Spacer()
+                            Text(showCompletedBuckets ? "Hide" : "Show")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(theme.accent)
+                        }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if showCompletedBuckets {
+                        ForEach(buckets) { bucket in
+                            AuditBucketCard(bucket: bucket)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func bucketGroupTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.bold())
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .tracking(0.5)
+    }
+
+    private func remainingBuckets(_ audit: DegreeAuditResponse) -> [AuditBucket] {
+        audit.buckets.filter { $0.status == "incomplete" } + audit.buckets.filter { $0.status == "in_progress" }
     }
 
     private func refreshAudit() async {
@@ -1132,32 +1232,51 @@ extension HokieSheetHeader where Trailing == EmptyView {
 // MARK: - Degree Audit Cards
 
 struct AuditSummaryCard: View {
+    @Environment(\.schoolTheme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let audit: DegreeAuditResponse
+    var schoolName: String? = nil
+    var source: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(audit.major) \(audit.degree)")
-                        .font(.headline.bold()).fontDesign(.rounded)
-                    Text("Catalog \(audit.catalogYear)")
+                        .font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text([schoolName, "Catalog \(audit.catalogYear)"].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Text("\(audit.percentComplete)%")
-                    .font(.title2.bold()).fontDesign(.rounded)
-                    .foregroundStyle(Color.vtBurgundy)
+                    .font(.title2.bold())
+                    .foregroundStyle(theme.accent)
             }
 
             ProgressView(value: Double(audit.percentComplete), total: 100)
+                .accessibilityLabel("Estimated progress")
+                .accessibilityValue("\(audit.percentComplete) percent")
 
-            HStack(spacing: 12) {
+            let metrics = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 12))
+                : AnyLayout(HStackLayout(spacing: 12))
+            metrics {
                 auditMetric(value: "\(Int(audit.completedCredits))/\(Int(audit.totalRequiredCredits))", label: "Credits")
-                auditMetric(value: "\(audit.completeBucketCount)/\(audit.totalBucketCount)", label: "Buckets")
+                auditMetric(value: "\(audit.completeBucketCount)/\(audit.totalBucketCount)", label: "Requirement groups")
+            }
+
+            if let source {
+                Text(source)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(18)
-        .glassSurface(cornerRadius: 24)
+        .glassSurface(cornerRadius: AgoraRadius.card)
     }
 
     private func auditMetric(value: String, label: String) -> some View {
@@ -1167,7 +1286,7 @@ struct AuditSummaryCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .glassInset(cornerRadius: 16)
+        .glassInset(cornerRadius: AgoraRadius.inset)
     }
 }
 
@@ -1239,6 +1358,8 @@ struct AuditBucketCard: View {
 // MARK: - DARS / uAchieve Cards
 
 struct DarsHeroCard: View {
+    @Environment(\.schoolTheme) private var theme
+
     let audit: DarsAuditResponse?
     let fileName: String?
     let isLoading: Bool
@@ -1246,57 +1367,53 @@ struct DarsHeroCard: View {
     let onClear: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                circleIcon("building.columns.fill", color: .vtBurgundy, size: 54)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("DARS / CollegeSource")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(audit == nil ? "Source-of-truth audit import" : loadedSubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        VStack(alignment: .leading, spacing: AgoraSpacing.lg) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(audit == nil ? "Import your official audit" : "Official audit on file")
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(audit == nil
+                     ? "Upload the PDF or a screenshot from DARS / uAchieve. When it's on file, it's the source of truth over the transcript estimate."
+                     : loadedSubtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             HStack(spacing: 10) {
                 Button(action: onImport) {
-                    Label(audit == nil ? "Import Audit" : "Replace Audit", systemImage: "arrow.up.doc.fill")
-                        .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .foregroundStyle(isLoading ? Color(.tertiaryLabel) : Color.vtBurgundy)
-                        .glassCapsule(strokeOpacity: 0.08)
+                    Label(audit == nil ? "Import DARS audit" : "Replace audit", systemImage: "arrow.up.doc.fill")
                 }
+                .buttonStyle(.agoraSecondary)
                 .disabled(isLoading)
-                .buttonStyle(.plain)
 
                 if audit != nil {
                     Button(action: onClear) {
                         Image(systemName: "xmark")
                             .font(.subheadline.bold())
-                            .foregroundStyle(Color.vtBurgundy)
-                            .frame(width: 46, height: 46)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 52, height: 52)
                             .glassCircle(strokeOpacity: 0.08)
                     }
-                    .accessibilityLabel("Clear DARS audit")
+                    .accessibilityLabel("Remove DARS audit")
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(20)
-        .glassSurface(cornerRadius: 26)
+        .padding(AgoraSpacing.xl - 4)
+        .glassSurface(cornerRadius: AgoraRadius.card)
     }
 
+    /// Only facts the import provides: prepared date and file name.
     private var loadedSubtitle: String {
+        var parts: [String] = []
         if let preparedOn = audit?.preparedOn, !preparedOn.isEmpty {
-            return "Prepared \(preparedOn)"
+            parts.append("Prepared \(preparedOn)")
         }
-        if let fileName {
-            return fileName
+        if let fileName, !fileName.isEmpty {
+            parts.append(fileName)
         }
-        return "Audit loaded"
+        return parts.isEmpty ? "Imported DARS audit" : parts.joined(separator: " · ")
     }
 }
 
@@ -1325,42 +1442,60 @@ struct DarsBackendStatusCard: View {
 }
 
 struct DarsAuditSummaryCard: View {
+    @Environment(\.schoolTheme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let audit: DarsAuditResponse
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(audit.program ?? "Degree Audit")
-                    .font(.headline.bold())
-                    .fontDesign(.rounded)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(audit.program ?? "Degree audit")
+                    .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    if let programCode = audit.programCode, !programCode.isEmpty {
-                        DarsPill(text: programCode, color: .vtBurgundy)
-                    }
-                    if let catalogYear = audit.catalogYear, !catalogYear.isEmpty {
-                        DarsPill(text: catalogYear, color: .blue)
-                    }
-                    if let auditType = audit.auditType, !auditType.isEmpty {
-                        DarsPill(text: auditType, color: .purple)
-                    }
+                if theme.isSchool {
+                    Text(theme.name)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { pills }
+                    VStack(alignment: .leading, spacing: 6) { pills }
+                }
+                if let graduationDate = audit.graduationDate, !graduationDate.isEmpty {
+                    Text("Graduation term on audit: \(graduationDate)")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
-            HStack(spacing: 12) {
+            let metrics = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 12))
+                : AnyLayout(HStackLayout(spacing: 12))
+            metrics {
                 darsMetric(value: audit.universityGPA.map { String(format: "%.3f", $0) } ?? "—", label: "University GPA")
                 darsMetric(value: audit.inMajorGPA.map { String(format: "%.3f", $0) } ?? "—", label: "In-Major GPA")
             }
         }
         .padding(18)
-        .glassSurface(cornerRadius: 24)
+        .glassSurface(cornerRadius: AgoraRadius.card)
+    }
+
+    @ViewBuilder
+    private var pills: some View {
+        if let programCode = audit.programCode, !programCode.isEmpty {
+            DarsPill(text: programCode, color: theme.accent)
+        }
+        if let catalogYear = audit.catalogYear, !catalogYear.isEmpty {
+            DarsPill(text: "Catalog \(catalogYear)", color: .secondary)
+        }
+        if let auditType = audit.auditType, !auditType.isEmpty {
+            DarsPill(text: auditType, color: .secondary)
+        }
     }
 
     private func darsMetric(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
                 .font(.title3.bold())
-                .fontDesign(.rounded)
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1516,7 +1651,7 @@ struct DarsSectionList: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
-            ForEach(sections.prefix(12)) { section in
+            ForEach(sections) { section in
                 DarsSectionCard(section: section)
             }
         }
