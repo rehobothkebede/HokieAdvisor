@@ -13,9 +13,19 @@
 // QA_NOW=2026-11-09T15:00:00Z pins the clock.
 
 import { errorResponse } from "../functions/_shared/academic.ts";
+import type { Extractor } from "../functions/courses/extraction.ts";
 import { handleHTTP } from "../functions/courses/http.ts";
+import { QA_RECORDINGS } from "./fixtures/qa_syllabi.ts";
 import { createTestDatabase, createUser } from "./harness.ts";
 import { PgliteStore } from "./store_pglite.ts";
+
+// No model calls locally: synthetic QA syllabi carry a fixture ID, and the
+// recorded model output for that ID is returned. Anything else fails visibly.
+const recordedExtractor: Extractor = (pages) => {
+  const id = pages.map((p) => p.text).join("\n").match(/QA-FIXTURE-ID:\s*(\S+)/)?.[1];
+  const data = id ? QA_RECORDINGS[id] : undefined;
+  return Promise.resolve(data ? { ok: true, data: structuredClone(data), model: "qa-recorded" } : { ok: false, code: "QA_NO_RECORDING" });
+};
 
 const db = await createTestDatabase();
 const tokens = new Map<string, string>([
@@ -37,6 +47,8 @@ Deno.serve({ hostname: "127.0.0.1", port }, (req) => {
     deps: ({ userId }) => ({
       store: new PgliteStore(db, userId),
       now: () => (pinnedNow ? new Date(pinnedNow) : new Date()),
+      userId,
+      extractor: recordedExtractor,
     }),
   });
 });

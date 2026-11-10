@@ -10,8 +10,10 @@ import { currentTerm, handleAction, localDate } from "../functions/courses/handl
 const db = await createTestDatabase("007_course_companion_registration.sql");
 const student = await createUser(db, "student@vt.edu");
 
-function deps(nowISO: string) {
-  return { store: new PgliteStore(db, student), now: () => new Date(nowISO) };
+const noExtractor = () => Promise.resolve({ ok: false as const, code: "UNUSED" });
+
+function deps(nowISO: string, userId = student) {
+  return { store: new PgliteStore(db, userId), now: () => new Date(nowISO), userId, extractor: noExtractor };
 }
 
 Deno.test("every seeded deadline cites a published official source", async () => {
@@ -116,8 +118,8 @@ Deno.test("unknown terms and actions return clear errors", async () => {
 Deno.test("a student with no active institution gets 'not supported', not VT data", async () => {
   const other = await createUser(db, "someone@example.com");
   await db.query("update public.profiles set institution_id = null where id = $1", [other]);
-  const result = await handleAction("overview", {}, { store: new PgliteStore(db, other), now: () => new Date() });
+  const result = await handleAction("overview", {}, deps(new Date().toISOString(), other));
   assertEquals((result.body as any).supported, false);
-  const guide = await handleAction("registration_guide", {}, { store: new PgliteStore(db, other), now: () => new Date() });
+  const guide = await handleAction("registration_guide", {}, deps(new Date().toISOString(), other));
   assertEquals(guide.status, 404);
 });

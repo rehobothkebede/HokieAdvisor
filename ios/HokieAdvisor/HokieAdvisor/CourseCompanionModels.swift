@@ -137,6 +137,16 @@ nonisolated enum CalendarDay {
 
     static func date(_ day: String) -> Date? { parser.date(from: day) }
 
+    /// The calendar day (yyyy-MM-dd) of `date` as the student sees it.
+    static func string(from date: Date, timeZone: TimeZone = .current) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = timeZone
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
+    }
+
     static func text(_ day: String, weekday: Bool = false, year: Bool = true) -> String {
         guard let date = date(day) else { return day }
         var style = Date.FormatStyle(date: .omitted, time: .omitted, timeZone: utc)
@@ -150,5 +160,123 @@ nonisolated enum CalendarDay {
     static func rangeText(_ start: String, _ end: String) -> String {
         let sameYear = start.prefix(4) == end.prefix(4)
         return "\(text(start, year: !sameYear)) – \(text(end))"
+    }
+}
+
+// MARK: - Courses and syllabi (stage 2)
+
+nonisolated enum SyllabusStatus: String, Decodable {
+    case needed
+    case processing
+    case reviewNeeded = "review_needed"
+    case ready
+    case updateAvailable = "update_available"
+
+    var label: String {
+        switch self {
+        case .needed: return "Syllabus needed"
+        case .processing: return "Processing"
+        case .reviewNeeded: return "Review needed"
+        case .ready: return "Ready"
+        case .updateAvailable: return "Updated version available"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .needed: return "doc.badge.plus"
+        case .processing: return "hourglass"
+        case .reviewNeeded: return "checklist"
+        case .ready: return "checkmark.circle"
+        case .updateAvailable: return "arrow.triangle.2.circlepath"
+        }
+    }
+}
+
+nonisolated struct DocumentFinding: Decodable, Equatable, Identifiable {
+    var id: String { "\(code)-\(page ?? 0)" }
+    let code: String
+    let message: String
+    let page: Int?
+}
+
+nonisolated struct SyllabusDocumentSummary: Decodable, Identifiable, Equatable {
+    let id: String
+    let courseId: String
+    let version: Int
+    let fileName: String
+    let mimeType: String
+    let sizeBytes: Int
+    let pageCount: Int
+    let textMethod: String
+    /// processing, review_needed, reviewed, or failed.
+    let processingState: String
+    let errorCode: String?
+    let findings: [DocumentFinding]
+    let uploadedAt: String
+    let extractedAt: String?
+    let reviewedAt: String?
+
+    var uploadedDate: Date? { ISO8601Timestamp.date(uploadedAt) }
+}
+
+nonisolated struct EnrolledCourse: Decodable, Identifiable, Equatable {
+    let id: String
+    let termKey: String
+    let subject: String
+    let number: String
+    let title: String
+    let sectionCode: String
+    let instructorName: String
+    let syllabusRemindOn: String?
+    let status: SyllabusStatus
+    let currentDocumentId: String?
+    let pendingDocumentId: String?
+    let lastUploadFailed: Bool
+    let documents: [SyllabusDocumentSummary]
+
+    var code: String { "\(subject) \(number)" }
+}
+
+nonisolated struct CourseListResponse: Decodable {
+    let termKey: String
+    let courses: [EnrolledCourse]
+}
+
+nonisolated struct AddCourseResponse: Decodable {
+    let course: EnrolledCourse
+}
+
+nonisolated struct UploadSyllabusResponse: Decodable {
+    let duplicate: Bool
+    let document: SyllabusDocumentSummary
+}
+
+nonisolated struct DeleteResponse: Decodable {
+    let deletedReminderIds: [String]?
+}
+
+nonisolated struct DocumentFileResponse: Decodable {
+    let mimeType: String
+    let fileName: String
+    let dataBase64: String
+}
+
+/// Parses server timestamps with or without fractional seconds.
+nonisolated enum ISO8601Timestamp {
+    private static let withFraction: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let plain = ISO8601DateFormatter()
+
+    static func date(_ value: String) -> Date? {
+        // Postgres text timestamps use a space and short offsets; normalize them.
+        var s = value.replacingOccurrences(of: " ", with: "T")
+        if let range = s.range(of: #"[+-]\d{2}$"#, options: .regularExpression) {
+            s.replaceSubrange(range, with: s[range] + ":00")
+        }
+        return withFraction.date(from: s) ?? plain.date(from: s)
     }
 }

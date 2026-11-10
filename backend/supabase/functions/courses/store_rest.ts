@@ -1,23 +1,49 @@
-// Production store: Supabase REST (PostgREST) called with the student's own
-// access token, so row-level security decides what each request can see or
-// change. The service-role key is never used here.
+// Production store: Supabase REST (PostgREST) and Storage called with the
+// student's own access token, so row-level security and bucket policies
+// decide what each request can see or change. The service role is used only
+// by ServiceRoleWriter, to record extraction results after the handler has
+// confirmed (with the student's token) that the course and document are theirs.
 
 import type {
+  CourseRow,
   CoursesStore,
   DeadlineRow,
+  DocumentRow,
+  FactRow,
   GuideTopicRow,
   Institution,
+  NewCourse,
+  NewDocument,
+  NewFact,
   SourceRow,
   TermRow,
+  TrustedWriter,
 } from "./types.ts";
 
+const BUCKET = "syllabi";
+const COURSE_COLUMNS = "id,term_id,subject,number,title,section_code,instructor_name,origin,syllabus_remind_on,created_at";
+const DOCUMENT_COLUMNS =
+  "id,course_id,version,storage_path,file_name,mime_type,size_bytes,sha256,page_count,text_method," +
+  "processing_state,error_code,findings,stated_identity,extraction_model,extracted_at,reviewed_at,uploaded_at";
+const FACT_COLUMNS =
+  "id,document_id,category,label,value,excerpt,page,qualifiers,evidence,issues,review_state,reviewed_at,sort_order";
+
+function storagePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
 export class RestStore implements CoursesStore {
+  readonly trusted: TrustedWriter;
+
   constructor(
     private supabaseURL: string,
     private anonKey: string,
     private accessToken: string,
     private userId: string,
-  ) {}
+    serviceRoleKey: string,
+  ) {
+    this.trusted = new ServiceRoleWriter(supabaseURL, serviceRoleKey);
+  }
 
   protected async rest<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${this.supabaseURL}/rest/v1/${path}`, {
@@ -72,5 +98,124 @@ export class RestStore implements CoursesStore {
     return this.rest(
       `official_sources?select=id,kind,title,publisher,url,checked_on&institution_id=eq.${institutionId}`,
     );
+  }
+
+  // ----- Stage 2 (all with the student's token; RLS applies) -----
+
+  listCourses(termId: string): Promise<CourseRow[]> {
+    return this.rest(`enrolled_courses?select=${COURSE_COLUMNS}&term_id=eq.${termId}`);
+  }
+
+  async getCourse(id: string): Promise<CourseRow | null> {
+    const rows = await this.rest<CourseRow[]>(`enrolled_courses?select=${COURSE_COLUMNS}&id=eq.${id}`);
+    return rows[0] ?? null;
+  }
+
+  async insertCourse(row: NewCourse): Promise<CourseRow> {
+    const rows = await this.rest<CourseRow[]>(`enrolled_courses?select=${COURSE_COLUMNS}`, {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ ...row, user_id: this.userId }),
+    });
+    return rows[0];
+  }
+
+  async setSyllabusReminder(courseId: string, remindOn: string | null): Promise<void> {
+    await this.rest(`enrolled_courses?id=eq.${courseId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ syllabus_remind_on: remindOn }),
+    });
+  }
+
+  async deleteCourse(id: string): Promise<void> {
+    await this.rest(`enrolled_courses?id=eq.${id}`, { method: "DELETE" });
+  }
+
+  listDocuments(courseIds: string[]): Promise<DocumentRow[]> {
+    if (!courseIds.length) return Promise.resolve([]);
+    return this.rest(`syllabus_documents?select=${DOCUMENT_COLUMNS}&course_id=in.(${courseIds.join(",")})`);
+  }
+
+  async getDocument(id: string): Promise<DocumentRow | null> {
+    const rows = await this.rest<DocumentRow[]>(`syllabus_documents?select=${DOCUMENT_COLUMNS}&id=eq.${id}`);
+    return rows[0] ?? null;
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await this.rest(`syllabus_documents?id=eq.${id}`, { method: "DELETE" });
+  }
+
+  listFacts(documentId: string): Promise<FactRow[]> {
+    return this.rest(`syllabus_facts?select=${FACT_COLUMNS}&document_id=eq.${documentId}&order=sort_order`);
+  }
+
+  // Storage, also with the student's token: bucket policies allow only their folder.
+  async putFile(path: string, bytes: Uint8Array, mimeType: string): Promise<void> {
+    const response = await fetch(`${this.supabaseURL}/storage/v1/object/${BUCKET}/${storagePath(path)}`, {
+      method: "POST",
+      headers: {
+        apikey: this.anonKey,
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": mimeType,
+        "x-upsert": "false",
+      },
+      body: new Uint8Array(bytes),
+    });
+    if (!response.ok) throw new Error(`Storage upload failed: ${response.status}`);
+  }
+
+  async getFile(path: string): Promise<Uint8Array> {
+    const response = await fetch(`${this.supabaseURL}/storage/v1/object/authenticated/${BUCKET}/${storagePath(path)}`, {
+      headers: { apikey: this.anonKey, Authorization: `Bearer ${this.accessToken}` },
+    });
+    if (!response.ok) throw new Error(`Storage download failed: ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async removeFiles(paths: string[]): Promise<void> {
+    if (!paths.length) return;
+    const response = await fetch(`${this.supabaseURL}/storage/v1/object/${BUCKET}`, {
+      method: "DELETE",
+      headers: {
+        apikey: this.anonKey,
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prefixes: paths }),
+    });
+    if (!response.ok) throw new Error(`Storage delete failed: ${response.status}`);
+  }
+}
+
+/** Service-role writes for extraction results. Callers verify ownership first. */
+class ServiceRoleWriter implements TrustedWriter {
+  constructor(private supabaseURL: string, private serviceRoleKey: string) {}
+
+  private async write(path: string, init: RequestInit): Promise<void> {
+    const response = await fetch(`${this.supabaseURL}/rest/v1/${path}`, {
+      ...init,
+      headers: {
+        apikey: this.serviceRoleKey,
+        Authorization: `Bearer ${this.serviceRoleKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Trusted write ${path.split("?")[0]} failed: ${response.status} ${text.slice(0, 200)}`);
+    }
+  }
+
+  insertDocument(row: NewDocument): Promise<void> {
+    return this.write("syllabus_documents", { method: "POST", body: JSON.stringify(row) });
+  }
+
+  updateDocument(id: string, patch: Partial<DocumentRow>): Promise<void> {
+    return this.write(`syllabus_documents?id=eq.${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  insertFacts(rows: NewFact[]): Promise<void> {
+    return this.write("syllabus_facts", { method: "POST", body: JSON.stringify(rows) });
   }
 }

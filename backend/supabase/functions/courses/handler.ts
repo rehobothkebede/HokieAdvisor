@@ -2,6 +2,8 @@
 // (database, storage, model, clock) comes in through `deps`, so the same code
 // runs in the edge function, in tests, and in the local QA server.
 
+import type { Extractor } from "./extraction.ts";
+import * as syllabi from "./syllabi.ts";
 import {
   type CoursesStore,
   type DeadlineRow,
@@ -13,6 +15,9 @@ import {
 export type Deps = {
   store: CoursesStore;
   now: () => Date;
+  /** The signed-in student; used only to name their private storage folder. */
+  userId: string;
+  extractor: Extractor;
 };
 
 const REGISTRATION_KINDS = new Set([
@@ -34,6 +39,22 @@ export async function handleAction(
         return ok(await overview(deps));
       case "registration_guide":
         return ok(await registrationGuide(stringField(body, "term_key"), deps));
+      case "list_courses":
+        return ok(await syllabi.listCourses(body, deps));
+      case "add_course":
+        return ok(await syllabi.addCourse(body, deps));
+      case "set_syllabus_reminder":
+        return ok(await syllabi.setSyllabusReminder(body, deps));
+      case "delete_course":
+        return ok(await syllabi.deleteCourse(body, deps));
+      case "upload_syllabus":
+        return ok(await syllabi.uploadSyllabus(body, deps));
+      case "get_document":
+        return ok(await syllabi.getDocument(body, deps));
+      case "document_file":
+        return ok(await syllabi.documentFile(body, deps));
+      case "delete_document":
+        return ok(await syllabi.deleteDocument(body, deps));
       default:
         throw new HandlerError(400, "COURSES_UNKNOWN_ACTION", "Unknown action.");
     }
