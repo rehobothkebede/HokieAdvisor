@@ -213,3 +213,6 @@ __marimo__/
 
 # Project generated data
 backend/data/courses/*.json
+
+# Node/Deno dependencies for local tooling
+node_modules/

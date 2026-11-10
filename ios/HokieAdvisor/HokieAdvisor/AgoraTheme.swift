@@ -120,6 +120,8 @@ struct SchoolTheme: Equatable {
     let accentDeep: Color
     let onAccent: Color
     let secondaryAccent: Color
+    /// Accent for text and small controls; stays readable on dark surfaces.
+    let accentText: Color
     /// `institutions.student_id_label` in migration 005, e.g. "PID".
     let studentIDLabel: String?
     /// `branding.community_name` in migration 005, e.g. "Hokie".
@@ -137,6 +139,7 @@ struct SchoolTheme: Equatable {
         accentDeep: Color(light: 0x101A2B, dark: 0xB06A3B),
         onAccent: Color(light: 0xF7F2E8, dark: 0x101A2B),
         secondaryAccent: AgoraPalette.copper,
+        accentText: Color(light: 0x1B2A41, dark: 0xD08C5C),
         studentIDLabel: nil,
         communityName: nil,
         welcome: nil
@@ -152,6 +155,7 @@ struct SchoolTheme: Equatable {
         accentDeep: Color(light: 0x501027, dark: 0x861F41),
         onAccent: .white,
         secondaryAccent: Color(hex: 0xE5751F),
+        accentText: Color(light: 0x861F41, dark: 0xE8A3BA),
         studentIDLabel: "PID",
         communityName: "Hokie",
         welcome: SchoolWelcome(

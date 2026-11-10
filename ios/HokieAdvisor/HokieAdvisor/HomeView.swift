@@ -10,6 +10,7 @@ struct HomeView: View {
     @AppStorage("graduationYear") private var graduationYear = ""
     @State private var scrollOffset: CGFloat = 0
     @State private var showTranscriptImport = false
+    @StateObject private var courseStore = CourseCompanionStore()
 
     private var compactTitleProgress: CGFloat {
         min(max((scrollOffset - 82) / 34, 0), 1)
@@ -24,6 +25,8 @@ struct HomeView: View {
                         .padding(.bottom, AgoraSpacing.xs)
                     nextStepCard
                     advisorCard
+                    ThisTermSection()
+                        .environmentObject(courseStore)
                     if let audit = appState.latestDegreeAudit, appState.hasTranscript {
                         degreeProgressCard(audit)
                     }

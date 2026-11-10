@@ -236,7 +236,7 @@ final class APIService {
         ]
     }
 
-    private static func supabaseFunctionHeaders(includeUserSession: Bool) async -> [String: String] {
+    static func supabaseFunctionHeaders(includeUserSession: Bool) async -> [String: String] {
         var headers = anonymousSupabaseFunctionHeaders()
         guard includeUserSession,
               let session = try? await SupabaseAuthService.shared.validatedCurrentSession() else {
@@ -327,7 +327,7 @@ final class APIService {
         do { return try JSONDecoder().decode(Response.self, from: data) } catch { throw APIError.decodingError(error) }
     }
 
-    private static func error(from data: Data, statusCode: Int) -> APIError {
+    static func error(from data: Data, statusCode: Int) -> APIError {
         if let body = try? JSONDecoder().decode(APIErrorBody.self, from: data),
            let detail = body.detail,
            !detail.message.isEmpty {
