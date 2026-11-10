@@ -392,12 +392,17 @@ struct FactSummary: View {
                     .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if !fact.qualifiers.isEmpty {
-                Text("Syllabus says: " + fact.qualifiers.map { "“\($0)”" }.joined(separator: ", "))
+                Text("Syllabus says: " + fact.qualifiers.map { "“\(Self.displayQualifier($0))”" }.joined(separator: ", "))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.orange)
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Qualifiers are stored lowercase; abbreviations read better in capitals.
+    static func displayQualifier(_ q: String) -> String {
+        ["tba", "tbd"].contains(q) ? q.uppercased() : q
     }
 }
 
