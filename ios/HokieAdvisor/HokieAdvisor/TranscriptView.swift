@@ -77,7 +77,7 @@ struct TranscriptView: View {
     private var transcriptHeader: some View {
         HokiePageHeader(
             title: "Transcript",
-            eyebrow: "Course record",
+            eyebrow: "",
             subtitle: "Upload once, then let the app read your academic path.",
             symbol: "doc.text.fill",
             accent: theme.accent,
@@ -87,20 +87,19 @@ struct TranscriptView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary.opacity(0.82))
-                    .frame(width: 38, height: 38)
-                    .glassCapsule(strokeOpacity: 0.08)
+                    .frame(width: 44, height: 44)
+                    .glassCircle(strokeOpacity: 0.08)
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("Close transcript import")
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
     }
 
-    private var transcriptHeaderStat: HokieHeaderStat {
-        if appState.hasTranscript {
-            return HokieHeaderStat(value: "\(appState.transcriptCourses.count)", label: "courses parsed", icon: "checkmark.seal.fill")
-        }
-        return HokieHeaderStat(value: "PDF", label: "PNG or JPG", icon: "arrow.up.doc.fill")
+    private var transcriptHeaderStat: HokieHeaderStat? {
+        guard appState.hasTranscript else { return nil }
+        return HokieHeaderStat(value: "\(appState.transcriptCourses.count)", label: "courses parsed", icon: "checkmark.seal.fill")
     }
 
     // MARK: - Upload Prompt
@@ -362,8 +361,7 @@ struct TranscriptView: View {
     private var strugglingCoursesInput: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Which courses are you struggling with?")
-                .font(.caption.bold()).foregroundStyle(.secondary)
-                .textCase(.uppercase).tracking(0.5)
+                .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
 
             if !appState.strugglingCourses.isEmpty {
                 FlowLayout(spacing: 8) {
@@ -427,8 +425,8 @@ struct TranscriptView: View {
             ForEach(appState.semesterGroups) { group in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(group.semester)
-                        .font(.caption.bold()).foregroundStyle(.secondary)
-                        .textCase(.uppercase).tracking(0.5).padding(.leading, 4)
+                        .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(.leading, 4)
                     ForEach(group.courses) { TranscriptCourseCard(course: $0) }
                 }
             }

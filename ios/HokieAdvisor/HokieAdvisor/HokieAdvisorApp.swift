@@ -40,6 +40,9 @@ struct HokieAdvisorApp: App {
     @State private var didCheckSession = false
     @State private var configuredUserID: UUID?
     @State private var restoredSnapshotUserID: UUID?
+    /// Set only by an explicit sign-in; never persisted, so relaunching,
+    /// restoring a session, refreshing a token, or foregrounding can't show it.
+    @State private var signInWelcome: SchoolWelcome?
 
     init() {
         let navigationAppearance = UINavigationBarAppearance()
@@ -89,9 +92,13 @@ struct HokieAdvisorApp: App {
                 if !didCheckSession {
                     LaunchLoadingView()
                 } else if !isAuthenticated || !authSessionActive {
-                    SignedOutFlow(isAuthenticated: $isAuthenticated)
+                    SignedOutFlow(isAuthenticated: $isAuthenticated, onSignedIn: presentSignInWelcome)
                         .environmentObject(appState)
                         .environmentObject(chatHistory)
+                } else if let welcome = signInWelcome {
+                    // Continue only clears the welcome; the checks below still
+                    // decide between onboarding and Home.
+                    SchoolWelcomeView(welcome: welcome) { signInWelcome = nil }
                 } else if !onboardingComplete {
                     OnboardingView()
                         .environmentObject(appState)
@@ -104,11 +111,12 @@ struct HokieAdvisorApp: App {
             }
             .environment(\.schoolTheme, schoolTheme)
             .tint(schoolTheme.accent)
-            .background(WindowAppearanceSetter(mode: appearanceMode))
+            .background(WindowAppearanceSetter(mode: signInWelcome == nil ? appearanceMode : "dark"))
             .preferredColorScheme(appPreferredColorScheme)
             .animation(.easeInOut(duration: 0.35), value: onboardingComplete)
             .animation(.easeInOut(duration: 0.35), value: isAuthenticated)
             .animation(.easeInOut(duration: 0.35), value: authSessionActive)
+            .animation(.easeInOut(duration: 0.35), value: signInWelcome)
             .task { await restoreSession() }
             .onChange(of: authSessionActive) { _, active in
                 Task { await handleAuthSessionChange(active) }
@@ -116,6 +124,10 @@ struct HokieAdvisorApp: App {
             .onOpenURL { url in
                 Task {
                     if (try? await SupabaseAuthService.shared.handleAuthRedirect(url)) == true {
+                        // Opening the email confirmation link is an explicit sign-in.
+                        if let email = (try? await SupabaseAuthService.shared.currentSession())?.user?.email {
+                            presentSignInWelcome(accountEmail: email)
+                        }
                         await configureAuthenticatedUserData()
                         isAuthenticated = true
                         authSessionActive = true
@@ -125,7 +137,16 @@ struct HokieAdvisorApp: App {
         }
     }
 
+    /// Greets the school of the account that just signed in, resolved from the
+    /// session's email, never from the school picked while signed out.
+    @MainActor
+    private func presentSignInWelcome(accountEmail: String) {
+        signInWelcome = SchoolTheme.forAccount(email: accountEmail).welcome
+    }
+
     private var appPreferredColorScheme: ColorScheme? {
+        // The welcome is designed light-on-dark; this also keeps the status bar legible.
+        if signInWelcome != nil { return .dark }
         switch appearanceMode {
         case "dark":
             return .dark
@@ -146,6 +167,16 @@ struct HokieAdvisorApp: App {
             authSessionActive = true
             // `-HokieVisualQAOnboarding` shows onboarding for the sample student.
             onboardingComplete = !ProcessInfo.processInfo.arguments.contains("-HokieVisualQAOnboarding")
+            // `-HokieVisualQASignIn` stands in for LoginView's success callback,
+            // since visual QA must not sign in to a real account.
+            if ProcessInfo.processInfo.arguments.contains("-HokieVisualQASignIn") {
+                presentSignInWelcome(accountEmail: vtEmail)
+                // `-HokieVisualQAContinue` then performs Continue's action after
+                // a pause, since the simulator tools here can't tap.
+                if ProcessInfo.processInfo.arguments.contains("-HokieVisualQAContinue") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { signInWelcome = nil }
+                }
+            }
             didCheckSession = true
             return
         }
@@ -170,6 +201,7 @@ struct HokieAdvisorApp: App {
         if active {
             await configureAuthenticatedUserData()
         } else {
+            signInWelcome = nil
             chatHistory.clearLoadedUser()
             configuredUserID = nil
             restoredSnapshotUserID = nil

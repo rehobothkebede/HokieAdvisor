@@ -93,11 +93,11 @@ struct HelpView: View {
                 Entry(
                     question: "How do chat memories work?",
                     answer: """
-                    Memories are short notes included with every question, such as your study preferences or course goals. Add your own in Profile → Saved Memories.
+                    Memories are short notes included with every question, such as your study preferences or course goals. Add your own in Profile → Saved memories.
 
                     Agora can also add memories on its own: topics you keep returning to, and short facts the advisor picks up from your messages.
 
-                    In Saved Memories you can edit or delete any memory, or use Delete all. When you're signed in, memories are saved to your account, and deleting one also removes it from your account.
+                    In Saved memories you can edit or delete any memory, or use Delete all. When you're signed in, memories are saved to your account, and deleting one also removes it from your account.
                     """
                 ),
             ]),
@@ -123,10 +123,8 @@ struct HelpView: View {
                     ForEach(topics) { topic in
                         VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
                             Text(topic.title)
-                                .font(.caption.weight(.semibold))
+                                .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .tracking(0.7)
                                 .padding(.leading, 4)
                                 .accessibilityAddTraits(.isHeader)
                             VStack(spacing: 0) {
@@ -170,50 +168,24 @@ struct HelpView: View {
 }
 
 private struct FAQRow: View {
-    @Environment(\.schoolTheme) private var theme
     let question: String
     let answer: String
+
     #if DEBUG
     /// `-HokieExpandFAQ` opens every answer for visual QA.
-    @State private var isExpanded = ProcessInfo.processInfo.arguments.contains("-HokieExpandFAQ")
+    private let initiallyExpanded = ProcessInfo.processInfo.arguments.contains("-HokieExpandFAQ")
     #else
-    @State private var isExpanded = false
+    private let initiallyExpanded = false
     #endif
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: AgoraSpacing.md) {
-                    Text(question)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(theme.accent)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                        .accessibilityHidden(true)
-                }
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-
-            if isExpanded {
-                Text(answer)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, AgoraSpacing.sm)
-            }
-        }
-        .padding(.horizontal, AgoraSpacing.lg)
-        .padding(.vertical, AgoraSpacing.xs)
+        AgoraDisclosureRow(
+            title: question,
+            detail: answer,
+            titleFont: .body.weight(.semibold),
+            detailFont: .subheadline,
+            initiallyExpanded: initiallyExpanded
+        )
     }
 }
 

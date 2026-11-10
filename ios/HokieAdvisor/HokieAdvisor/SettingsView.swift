@@ -37,11 +37,11 @@ struct SettingsView: View {
                     profileHeader
                         .padding(.top, 12)
                     profileCard
-                    settingsGroup(title: "School & Program") { academicSection }
+                    settingsGroup(title: "School & program") { academicSection }
                     settingsGroup(title: "Transcript") { transcriptSection }
-                    settingsGroup(title: "Chat Memory") { chatMemorySection }
+                    settingsGroup(title: "Chat memory") { chatMemorySection }
                     settingsGroup(title: "Appearance") { appearanceSection }
-                    settingsGroup(title: "Help & About") { aboutSection }
+                    settingsGroup(title: "Help & about") { aboutSection }
                     settingsGroup(title: "Account") { dangerSection }
 
                     Text("\(AgoraBrand.name) · v1.0.0\n\(AgoraBrand.tagline)")
@@ -142,53 +142,36 @@ struct SettingsView: View {
     // MARK: - Profile Card
 
     private var compactTitleOverlay: some View {
-        HokieCompactPill(
-            title: "Profile",
-            symbol: "person.crop.circle.fill",
-            accent: theme.accent,
-            progress: compactTitleProgress
-        )
-        .padding(.top, 8)
+        HokieCompactTitleBar(title: "Profile", progress: compactTitleProgress)
     }
 
     private var profileHeader: some View {
         HokiePageHeader(
             title: "Profile",
-            eyebrow: theme.isSchool ? theme.name : AgoraBrand.name,
+            eyebrow: "",
             subtitle: "Your school, records, and account.",
             symbol: "person.crop.circle.fill",
-            accent: theme.accent,
-            stat: profileHeaderStat
+            accent: theme.accent
         )
-    }
-
-    private var profileHeaderStat: HokieHeaderStat {
-        if !graduationYear.isEmpty {
-            return HokieHeaderStat(value: "'\(String(graduationYear.suffix(2)))", label: "grad year", icon: "graduationcap.fill")
-        }
-        if !vtPID.isEmpty {
-            return HokieHeaderStat(value: vtPID.uppercased(), label: theme.studentIDLabel ?? "ID", icon: "person.text.rectangle.fill")
-        }
-        return HokieHeaderStat(value: "New", label: "profile", icon: "person.fill")
     }
 
     private var profileCard: some View {
         VStack(spacing: 14) {
             ZStack {
-                Circle().fill(theme.accent).frame(width: 76, height: 76)
+                Circle().fill(theme.accent.opacity(0.12)).frame(width: 72, height: 72)
                 if initials.isEmpty {
                     Image(systemName: "person.fill")
                         .font(.title2)
-                        .foregroundStyle(theme.onAccent)
+                        .foregroundStyle(theme.accent)
                 } else {
-                    Text(initials).font(.title2.weight(.semibold)).foregroundStyle(theme.onAccent)
+                    Text(initials).font(.title2.weight(.semibold)).foregroundStyle(theme.accent)
                 }
             }
             .accessibilityHidden(true)
 
             VStack(spacing: 6) {
                 TextField("Your name", text: $studentName)
-                    .font(.system(.title2, design: .serif, weight: .semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(AgoraPalette.brandInk)
                     .multilineTextAlignment(.center)
                     .accessibilityLabel("Name")
@@ -200,8 +183,9 @@ struct SettingsView: View {
 
                 if let gpa = appState.calculatedGPA {
                     Text(String(format: "%.2f GPA", gpa))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(gpaColor(gpa))
+                        .font(.subheadline.weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -343,7 +327,7 @@ struct SettingsView: View {
                 }
             }
             divider
-            row(icon: "calendar", iconColor: theme.accent, label: "Grad Year") {
+            row(icon: "calendar", iconColor: theme.accent, label: "Grad year") {
                 TextField("Not set", text: $graduationYear)
                     .font(.subheadline).foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
@@ -372,7 +356,7 @@ struct SettingsView: View {
                     }
                 }
             } else {
-                row(icon: "arrow.up.doc.fill", iconColor: theme.accent, label: "Import Transcript") {
+                row(icon: "arrow.up.doc.fill", iconColor: theme.accent, label: "Import transcript") {
                     chevron
                 }
             }
@@ -389,14 +373,14 @@ struct SettingsView: View {
 
     private var chatMemorySection: some View {
         VStack(spacing: 0) {
-            row(icon: "bubble.left.and.bubble.right.fill", iconColor: theme.accent, label: "Saved Chats") {
+            row(icon: "bubble.left.and.bubble.right.fill", iconColor: theme.accent, label: "Saved chats") {
                 Text("\(chatHistory.sessions.count)")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
 
             divider
             Button { showMemoryEditor = true } label: {
-                row(icon: "sparkles", iconColor: theme.accent, label: "Saved Memories") {
+                row(icon: "sparkles", iconColor: theme.accent, label: "Saved memories") {
                     HStack(spacing: 8) {
                         Text("\(chatHistory.memories.count)")
                             .font(.subheadline).foregroundStyle(.secondary)
@@ -409,7 +393,7 @@ struct SettingsView: View {
 
             if appState.hasTranscript {
                 divider
-                row(icon: "person.text.rectangle.fill", iconColor: theme.accent, label: "Transcript Context") {
+                row(icon: "person.text.rectangle.fill", iconColor: theme.accent, label: "Transcript context") {
                     Text("\(appState.transcriptCourses.count) courses")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
@@ -418,11 +402,9 @@ struct SettingsView: View {
             if !chatHistory.recentMemoryHighlights.isEmpty {
                 divider
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Memory Preview")
-                        .font(.caption.bold())
+                    Text("Memory preview")
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
 
                     ForEach(chatHistory.recentMemoryHighlights) { memory in
                         HStack(alignment: .top, spacing: 8) {
@@ -513,10 +495,8 @@ struct SettingsView: View {
             if !title.isEmpty {
                 HStack(spacing: 8) {
                     Text(title)
-                        .font(.caption.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(0.7)
                         .accessibilityAddTraits(.isHeader)
                 }
                 .padding(.leading, 4)
@@ -693,10 +673,8 @@ struct ChatMemoryEditorView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Saved")
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.7)
                     .padding(.leading, 4)
                 Spacer()
                 if !chatHistory.memories.isEmpty {

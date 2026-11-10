@@ -29,24 +29,26 @@ enum HokieChrome {
 
 // MARK: - Glass Surfaces
 //
-// Surfaces are flat Agora ivory/navy cards with a hairline stroke and a soft
-// shadow. The `glass*` modifier names are kept so call sites stay unchanged.
+// Surfaces are flat, opaque cards on the neutral background, separated by a
+// hairline stroke rather than a shadow. The `glass*` modifier names are kept
+// so call sites stay unchanged.
 
 private enum HokieGlassPalette {
     static func surfaceFill(for colorScheme: ColorScheme) -> Color {
-        AgoraPalette.surface.opacity(colorScheme == .dark ? 0.94 : 0.92)
+        AgoraPalette.surface
     }
 
     static func insetFill(for colorScheme: ColorScheme) -> Color {
-        AgoraPalette.surfaceInset.opacity(colorScheme == .dark ? 0.80 : 0.70)
+        AgoraPalette.surfaceInset.opacity(colorScheme == .dark ? 0.85 : 0.75)
     }
 
+    /// Kept nearly invisible: surfaces read by fill contrast, not elevation.
     static func shadow(for colorScheme: ColorScheme) -> Color {
-        Color.black.opacity(colorScheme == .dark ? 0.24 : 0.06)
+        colorScheme == .dark ? .clear : Color.black.opacity(0.018)
     }
 
     static func stroke(opacity: Double, for colorScheme: ColorScheme) -> Color {
-        AgoraPalette.stroke.opacity(min(1, 0.55 + opacity * 4))
+        AgoraPalette.stroke.opacity(colorScheme == .dark ? 0.55 : 0.6)
     }
 }
 
@@ -64,13 +66,13 @@ private struct HokieGlassRoundedBackground: View {
         shape
             .fill(inset ? HokieGlassPalette.insetFill(for: colorScheme) : HokieGlassPalette.surfaceFill(for: colorScheme))
             .overlay {
-                shape.stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 1)
+                shape.stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 0.75)
             }
             .shadow(
                 color: elevated ? HokieGlassPalette.shadow(for: colorScheme) : .clear,
-                radius: elevated ? 10 : 0,
+                radius: elevated ? 6 : 0,
                 x: 0,
-                y: elevated ? 4 : 0
+                y: elevated ? 2 : 0
             )
     }
 }
@@ -85,13 +87,13 @@ private struct HokieGlassCapsuleBackground: View {
         Capsule()
             .fill(HokieGlassPalette.surfaceFill(for: colorScheme))
             .overlay {
-                Capsule().stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 1)
+                Capsule().stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 0.75)
             }
             .shadow(
                 color: elevated ? HokieGlassPalette.shadow(for: colorScheme) : .clear,
-                radius: elevated ? 10 : 0,
+                radius: elevated ? 6 : 0,
                 x: 0,
-                y: elevated ? 4 : 0
+                y: elevated ? 2 : 0
             )
     }
 }
@@ -106,13 +108,13 @@ private struct HokieGlassCircleBackground: View {
         Circle()
             .fill(HokieGlassPalette.surfaceFill(for: colorScheme))
             .overlay {
-                Circle().stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 1)
+                Circle().stroke(HokieGlassPalette.stroke(opacity: strokeOpacity, for: colorScheme), lineWidth: 0.75)
             }
             .shadow(
                 color: elevated ? HokieGlassPalette.shadow(for: colorScheme) : .clear,
-                radius: elevated ? 10 : 0,
+                radius: elevated ? 6 : 0,
                 x: 0,
-                y: elevated ? 4 : 0
+                y: elevated ? 2 : 0
             )
     }
 }
@@ -237,75 +239,40 @@ struct HokiePageHeader<Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 9) {
-                HokieSignalMark(symbol: symbol, accent: accent)
-                Capsule()
-                    .fill(accent.opacity(0.75))
-                    .frame(width: 2, height: 40)
-                    .accessibilityHidden(true)
-            }
-            .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(eyebrow.uppercased())
-                            .font(.agoraEyebrow)
-                            .tracking(1.6)
-                            .foregroundStyle(accent)
-
-                        Text(title)
-                            .font(.agoraDisplay(min(titleSize, 52)))
-                            .foregroundStyle(AgoraPalette.brandInk)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.8)
-                            .fixedSize(horizontal: false, vertical: true)
-
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !eyebrow.isEmpty {
+                        Text(eyebrow)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(title)
+                        .font(.system(size: min(titleSize, 48), weight: .bold))
+                        .tracking(-0.6)
+                        .foregroundStyle(AgoraPalette.brandInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
-                    Spacer(minLength: 8)
-                    trailing()
                 }
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 9) { signalRow }
-                    VStack(alignment: .leading, spacing: 9) { signalRow }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                trailing()
+            }
+            if let stat {
+                Label {
+                    Text("\(stat.value) \(stat.label)")
+                } icon: {
+                    Image(systemName: stat.icon).foregroundStyle(accent)
                 }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 8)
-    }
-}
-
-extension HokiePageHeader {
-    @ViewBuilder
-    fileprivate var signalRow: some View {
-        HokieSignalTrack(accent: accent)
-            .frame(maxWidth: 118)
-
-        if let stat {
-            HStack(spacing: 7) {
-                Image(systemName: stat.icon)
-                    .font(.caption.weight(.semibold))
-                Text(stat.value)
-                    .font(.caption.weight(.bold))
-                Text(stat.label)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .foregroundStyle(.primary)
-            .fixedSize()
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(AgoraPalette.surfaceInset, in: Capsule())
-            .overlay(Capsule().stroke(AgoraPalette.stroke, lineWidth: 1))
-        }
+        .padding(.top, 4)
     }
 }
 
@@ -325,50 +292,6 @@ extension HokiePageHeader where Trailing == EmptyView {
         self.accent = accent
         self.stat = stat
         self.trailing = { EmptyView() }
-    }
-}
-
-/// Header emblem: always Agora navy/ivory so the platform identity stays fixed;
-/// the accent only marks the bottom edge.
-struct HokieSignalMark: View {
-    let symbol: String
-    let accent: Color
-
-    var body: some View {
-        let markShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-
-        ZStack {
-            markShape
-                .fill(AgoraPalette.brandInk)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(accent)
-                        .frame(height: 3)
-                        .clipShape(markShape)
-                }
-
-            Image(systemName: symbol)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AgoraPalette.background)
-        }
-        .frame(width: 52, height: 48)
-        .clipShape(markShape)
-        .accessibilityHidden(true)
-    }
-}
-
-struct HokieSignalTrack: View {
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Capsule().fill(AgoraPalette.brandInk.opacity(0.82)).frame(width: 38)
-            Capsule().fill(accent.opacity(0.80)).frame(width: 20)
-            Capsule().fill(AgoraPalette.copper.opacity(0.70)).frame(width: 12)
-            Capsule().fill(AgoraPalette.stroke).frame(maxWidth: .infinity)
-        }
-        .frame(height: 4)
-        .accessibilityHidden(true)
     }
 }
 
@@ -394,20 +317,24 @@ struct HokieSegmentedControl<Selection: Hashable>: View {
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                        .foregroundStyle(isSelected ? (accent == nil ? theme.onAccent : Color.white) : Color.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .foregroundStyle(isSelected ? (accent ?? AgoraPalette.brandInk) : Color.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .padding(.vertical, 2)
                         .background {
                             if isSelected {
-                                Capsule().fill(accent ?? theme.accent)
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(AgoraPalette.surface)
+                                    .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
                             }
                         }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .padding(4)
-        .glassCapsule(strokeOpacity: 0.08)
+        .padding(3)
+        .background(AgoraPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .sensoryFeedback(.selection, trigger: selection)
     }
 }
@@ -421,41 +348,45 @@ struct HokieIconTile: View {
         let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
 
         ZStack {
-            shape.fill(color)
+            shape.fill(color.opacity(0.1))
 
             Image(systemName: symbol)
-                .font(.system(size: size * 0.42, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(.system(size: size * 0.42, weight: .medium))
+                .foregroundStyle(color)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 }
 
-struct HokieCompactPill: View {
+/// Inline title that fades in once the large page header scrolls away, like a
+/// standard navigation bar: full width, translucent, hairline bottom edge.
+struct HokieCompactTitleBar: View {
     let title: String
-    let symbol: String
-    let accent: Color
     var progress: CGFloat
 
     var body: some View {
-        HStack(spacing: 7) {
-            HokieIconTile(symbol: symbol, color: accent, size: 22)
-            Text(title)
-                .font(.agoraDisplay(15))
-                .foregroundStyle(AgoraPalette.brandInk)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background {
-            Capsule()
-                .fill(.regularMaterial)
-            HokieGlassCapsuleBackground(strokeOpacity: 0.18)
-        }
-        .opacity(Double(progress))
-        .scaleEffect(0.96 + (0.04 * progress))
-        .allowsHitTesting(false)
-        .accessibilityHidden(progress < 0.5)
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(AgoraPalette.brandInk)
+            .lineLimit(1)
+            // A bar title can't grow without covering content; VoiceOver and the
+            // large header above it carry the full-size title.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background {
+                Rectangle()
+                    .fill(AgoraPalette.background.opacity(0.96))
+                    .ignoresSafeArea(edges: .top)
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(AgoraPalette.stroke.opacity(0.7))
+                    .frame(height: 0.5)
+            }
+            .opacity(Double(progress))
+            .allowsHitTesting(false)
+            .accessibilityHidden(progress < 0.5)
     }
 }
 
@@ -552,44 +483,65 @@ struct ContentView: View {
 
 struct FloatingTabBar: View {
     @Environment(\.schoolTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selectedTab: Int
 
     private let items: [(icon: String, label: String)] = [
-        ("house.fill",                          "Home"),
-        ("checklist.checked",                   "Audit"),
-        ("bubble.left.and.bubble.right.fill",   "Advisor"),
-        ("person.crop.circle.fill",             "Profile"),
+        ("house",                          "Home"),
+        ("checklist.checked",              "Progress"),
+        ("bubble.left.and.bubble.right",   "Advisor"),
+        ("person.crop.circle",             "Profile"),
     ]
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<4, id: \.self) { i in
+        HStack(spacing: 2) {
+            ForEach(0..<items.count, id: \.self) { i in
                 let isSelected = selectedTab == i
                 Button {
                     setTabWithoutPageTraversal { selectedTab = i }
                 } label: {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 3) {
                         Image(systemName: items[i].icon)
-                            .font(.system(size: 16, weight: .semibold))
+                            .symbolVariant(isSelected ? .fill : .none)
+                            .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
+                            .frame(height: 22)
                         Text(items[i].label)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
-                    .foregroundStyle(isSelected ? theme.onAccent : Color.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    // School maroon is too dark for text on the dark bar; the
+                    // tinted pill carries the accent there instead.
+                    .foregroundStyle(isSelected
+                        ? (colorScheme == .dark ? AgoraPalette.brandInk : theme.accent)
+                        : Color.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 50)
                     .background {
                         if isSelected {
-                            RoundedRectangle(cornerRadius: 23, style: .continuous)
-                                .fill(theme.accent)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(theme.accent.opacity(colorScheme == .dark ? 0.16 : 0.08))
                         }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(items[i].label)
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                // Labels stay compact like a system tab bar; long-press shows
+                // them enlarged at accessibility text sizes.
+                .accessibilityShowsLargeContentViewer {
+                    Image(systemName: items[i].icon)
+                    Text(items[i].label)
+                }
             }
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 6)
-        .glassCapsule(strokeOpacity: 0.12)
+        .padding(5)
+        .background(AgoraPalette.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AgoraPalette.stroke.opacity(colorScheme == .dark ? 0.7 : 0.5), lineWidth: 0.75)
+        )
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.06), radius: 14, y: 4)
         .sensoryFeedback(.selection, trigger: selectedTab)
     }
 }
@@ -675,19 +627,13 @@ struct DegreeAuditView: View {
     // MARK: Header
 
     private var compactTitleOverlay: some View {
-        HokieCompactPill(
-            title: "Degree Progress",
-            symbol: "checklist.checked",
-            accent: theme.accent,
-            progress: compactTitleProgress
-        )
-        .padding(.top, 8)
+        HokieCompactTitleBar(title: "Degree Progress", progress: compactTitleProgress)
     }
 
     private var auditHeader: some View {
         HokiePageHeader(
             title: "Degree Progress",
-            eyebrow: theme.isSchool ? theme.name : AgoraBrand.name,
+            eyebrow: "",
             subtitle: programLine,
             symbol: "checklist.checked",
             accent: theme.accent,
@@ -940,10 +886,8 @@ struct DegreeAuditView: View {
 
     private func bucketGroupTitle(_ title: String) -> some View {
         Text(title)
-            .font(.caption.bold())
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .tracking(0.5)
     }
 
     private func remainingBuckets(_ audit: DegreeAuditResponse) -> [AuditBucket] {
@@ -1169,22 +1113,96 @@ func centeredLoadingView(label: String) -> some View {
 
 // MARK: - SectionLabel
 
+/// A compact expandable row for guidance and FAQs: title plus a small chevron,
+/// detail revealed in place. Place inside a grouped surface with dividers.
+struct AgoraDisclosureRow: View {
+    let title: String
+    let detail: String
+    var icon: String? = nil
+    var titleFont: Font = .subheadline.weight(.medium)
+    var detailFont: Font = .footnote
+    @State private var isExpanded: Bool
+
+    init(
+        title: String,
+        detail: String,
+        icon: String? = nil,
+        titleFont: Font = .subheadline.weight(.medium),
+        detailFont: Font = .footnote,
+        initiallyExpanded: Bool = false
+    ) {
+        self.title = title
+        self.detail = detail
+        self.icon = icon
+        self.titleFont = titleFont
+        self.detailFont = detailFont
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
+
+    /// Detail text lines up with the title, past the icon column when shown.
+    private var detailLeading: CGFloat { icon == nil ? 0 : 24 + AgoraSpacing.md }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            } label: {
+                HStack(alignment: .center, spacing: AgoraSpacing.md) {
+                    if let icon {
+                        Image(systemName: icon)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24)
+                            .accessibilityHidden(true)
+                    }
+                    Text(title)
+                        .font(titleFont)
+                        .foregroundStyle(AgoraPalette.brandInk)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: AgoraSpacing.sm)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .accessibilityHidden(true)
+                }
+                .padding(.vertical, AgoraSpacing.sm)
+                .frame(minHeight: 48)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Hides details" : "Shows details")
+
+            if isExpanded {
+                Text(detail)
+                    .font(detailFont)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, detailLeading)
+                    .padding(.bottom, AgoraSpacing.md)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, AgoraSpacing.lg)
+    }
+}
+
 struct SectionLabel: View {
     let title: String
     let icon: String
     var color: Color = .primary
 
+    /// `icon` and `color` are accepted for existing call sites; section titles
+    /// stay text-only so headings don't compete with content.
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 22, height: 22)
-
-            Text(title)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
-        }
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(AgoraPalette.brandInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -1196,16 +1214,16 @@ struct HokieSheetHeader<Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: 12) {
-            HokieIconTile(symbol: symbol, color: accent, size: 38)
-
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.agoraDisplay(19))
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(AgoraPalette.brandInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.caption.weight(.semibold))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -1214,10 +1232,10 @@ struct HokieSheetHeader<Trailing: View>: View {
             Spacer(minLength: 8)
             trailing()
         }
-        .padding(12)
-        .glassSurface(cornerRadius: 22, strokeOpacity: 0.08)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
+        .background(AgoraPalette.background.opacity(0.96))
     }
 }
 
@@ -1514,10 +1532,8 @@ struct DarsCategoryList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Categories")
-                .font(.caption.bold())
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
             ForEach(categories) { category in
                 DarsCategoryCard(category: category)
             }
@@ -1649,10 +1665,8 @@ struct DarsSectionList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Sections")
-                .font(.caption.bold())
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
             ForEach(sections) { section in
                 DarsSectionCard(section: section)
             }
@@ -2028,10 +2042,8 @@ struct GraphDiagramView: View {
                     .font(.caption.bold())
                     .foregroundStyle(theme.accent)
                 Text("Visual model")
-                    .font(.caption.bold())
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
             }
 
             GeometryReader { proxy in

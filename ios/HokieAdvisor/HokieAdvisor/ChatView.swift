@@ -148,13 +148,12 @@ struct ChatView: View {
     private var header: some View {
         HokiePageHeader(
             title: "Advisor",
-            eyebrow: theme.isSchool ? theme.name : AgoraBrand.name,
+            eyebrow: "",
             subtitle: dynamicTypeSize.isAccessibilitySize
                 ? "Advising and study help."
                 : "Academic advising for your degree, with study help when you need it.",
             symbol: "bubble.left.and.bubble.right.fill",
             accent: theme.accent,
-            stat: vm.messages.isEmpty ? nil : advisorHeaderStat
         ) {
             HStack(spacing: 8) {
                 headerButton("clock.arrow.circlepath", label: "Chat history") { showHistory = true }
@@ -177,24 +176,8 @@ struct ChatView: View {
         .accessibilityLabel(label)
     }
 
-    private var advisorHeaderStat: HokieHeaderStat {
-        if !vm.messages.isEmpty {
-            return HokieHeaderStat(value: "\(vm.messages.count)", label: "messages", icon: "text.bubble.fill")
-        }
-        if chatHistory.sessions.isEmpty {
-            return HokieHeaderStat(value: "Ready", label: "new chat", icon: "sparkles")
-        }
-        return HokieHeaderStat(value: "\(chatHistory.sessions.count)", label: "saved chats", icon: "clock.arrow.circlepath")
-    }
-
     private var compactTitleOverlay: some View {
-        HokieCompactPill(
-            title: "Advisor",
-            symbol: "bubble.left.and.bubble.right.fill",
-            accent: theme.accent,
-            progress: compactTitleProgress
-        )
-            .padding(.top, 8)
+        HokieCompactTitleBar(title: "Advisor", progress: compactTitleProgress)
     }
 
     // MARK: - Message List
@@ -1100,7 +1083,7 @@ struct ChatHistorySheet: View {
                             .font(.system(size: 40))
                             .foregroundStyle(theme.accent.opacity(0.5))
                         Text("No saved chats yet")
-                            .font(.agoraDisplay(22))
+                            .font(.title3.weight(.semibold))
                             .foregroundStyle(AgoraPalette.brandInk)
                         Text("Your conversations are automatically saved as you chat.")
                             .font(.subheadline).foregroundStyle(.tertiary)

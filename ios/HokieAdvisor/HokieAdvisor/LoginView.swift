@@ -10,6 +10,9 @@ struct LoginView: View {
 
     @Binding var isAuthenticated: Bool
     var onChangeSchool: (() -> Void)? = nil
+    /// Called once after an explicit, successful sign-in with the email of the
+    /// returned session, so the app can greet the account's actual school.
+    var onSignedIn: ((String) -> Void)? = nil
     @EnvironmentObject var appState: AppState
     @Environment(\.schoolTheme) private var theme
     @AppStorage("studentName") private var studentName = ""
@@ -181,7 +184,7 @@ struct LoginView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(20)
-        .glassSurface(cornerRadius: 28)
+        .glassSurface(cornerRadius: AgoraRadius.card)
     }
 
     private var buttonTitle: String {
@@ -215,9 +218,11 @@ struct LoginView: View {
         defer { isLoading = false }
 
         do {
+            let accountEmail: String
             switch mode {
             case .signIn:
-                _ = try await SupabaseAuthService.shared.signIn(email: normalizedEmail, password: password)
+                let session = try await SupabaseAuthService.shared.signIn(email: normalizedEmail, password: password)
+                accountEmail = session.user?.email ?? normalizedEmail
                 let needsSignupSetup = pendingSignupEmail == normalizedEmail
                 storeAccountBasics(name: studentName, completeOnboarding: !needsSignupSetup)
                 if needsSignupSetup {
@@ -245,7 +250,10 @@ struct LoginView: View {
 
                 pendingSignupEmail = ""
                 storeAccountBasics(name: name, completeOnboarding: false)
+                accountEmail = session?.user?.email ?? normalizedEmail
             }
+
+            onSignedIn?(accountEmail)
 
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 authSessionActive = true

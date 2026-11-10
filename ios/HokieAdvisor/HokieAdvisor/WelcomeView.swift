@@ -6,12 +6,15 @@ import SwiftUI
 /// screen; once signed in, the account determines the school.
 struct SignedOutFlow: View {
     @Binding var isAuthenticated: Bool
+    /// Forwards LoginView's successful sign-in (with the session's email).
+    var onSignedIn: ((String) -> Void)? = nil
     @AppStorage("vtEmail") private var vtEmail = ""
 
     @State private var selectedSchool: SchoolTheme?
 
-    init(isAuthenticated: Binding<Bool>) {
+    init(isAuthenticated: Binding<Bool>, onSignedIn: ((String) -> Void)? = nil) {
         _isAuthenticated = isAuthenticated
+        self.onSignedIn = onSignedIn
         // A student waiting on email confirmation goes straight back to sign-in.
         let pendingEmail = UserDefaults.standard.string(forKey: "pendingSignupEmail") ?? ""
         _selectedSchool = State(initialValue: pendingEmail.isEmpty ? nil : SchoolTheme.forAccount(email: pendingEmail))
@@ -20,9 +23,13 @@ struct SignedOutFlow: View {
     var body: some View {
         ZStack {
             if let school = selectedSchool {
-                LoginView(isAuthenticated: $isAuthenticated) {
-                    withAnimation(.easeInOut(duration: 0.3)) { selectedSchool = nil }
-                }
+                LoginView(
+                    isAuthenticated: $isAuthenticated,
+                    onChangeSchool: {
+                        withAnimation(.easeInOut(duration: 0.3)) { selectedSchool = nil }
+                    },
+                    onSignedIn: onSignedIn
+                )
                 .environment(\.schoolTheme, school)
                 .tint(school.accent)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -53,14 +60,11 @@ struct WelcomeView: View {
 
             VStack(spacing: AgoraSpacing.lg) {
                 AgoraWordmark(size: min(wordmarkSize, 84))
-
-                Capsule()
-                    .fill(AgoraPalette.copper)
-                    .frame(width: 36, height: 2)
-                    .accessibilityHidden(true)
+                    .padding(.bottom, AgoraSpacing.xs)
 
                 Text(AgoraBrand.tagline)
-                    .font(.agoraDisplay(min(taglineSize, 44), weight: .regular))
+                    .font(.system(size: min(taglineSize, 44), weight: .semibold))
+                    .tracking(-0.4)
                     .foregroundStyle(AgoraPalette.brandInk)
                     .multilineTextAlignment(.center)
 
@@ -128,7 +132,7 @@ struct SchoolPickerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AgoraSpacing.lg) {
             Text("Find your school")
-                .font(.agoraDisplay(26))
+                .font(.title2.weight(.bold))
                 .foregroundStyle(AgoraPalette.brandInk)
 
             HStack(spacing: AgoraSpacing.sm) {
@@ -143,8 +147,8 @@ struct SchoolPickerSheet: View {
                 ForEach(matches, id: \.name) { school in
                     Button { onSelect(school) } label: {
                         HStack(spacing: AgoraSpacing.md) {
-                            Image(systemName: "building.columns.fill")
-                                .font(.system(size: 17, weight: .semibold))
+                            Image(systemName: "building.columns")
+                                .font(.system(size: 17, weight: .medium))
                                 .foregroundStyle(AgoraPalette.brandInk)
                                 .frame(width: 40, height: 40)
                                 .background(AgoraPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

@@ -86,14 +86,17 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             Spacer()
             VStack(spacing: 32) {
-                HokiePageHeader(
-                    title: AgoraBrand.name,
-                    eyebrow: theme.name,
-                    subtitle: AgoraBrand.supportingLine,
-                    symbol: "graduationcap.fill",
-                    accent: theme.accent,
-                    stat: HokieHeaderStat(value: "Setup", label: "takes a minute", icon: "sparkles")
-                )
+                VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
+                    Text(theme.name)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    AgoraWordmark(size: 44)
+                    Text(AgoraBrand.supportingLine)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
 
                 VStack(spacing: 10) {
@@ -297,7 +300,7 @@ struct OnboardingView: View {
 
                 VStack(spacing: 12) {
                     Text(appState.hasTranscript ? "Transcript imported!" : "Import your transcript")
-                        .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                        .font(.largeTitle.weight(.bold))
                         .multilineTextAlignment(.center)
                     Text(appState.hasTranscript
                          ? "\(appState.transcriptCourses.count) courses · \(Int(appState.totalCredits)) credits loaded."
@@ -310,7 +313,7 @@ struct OnboardingView: View {
                     Button { showTranscript = true } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "arrow.up.doc.fill").font(.body.bold())
-                            Text("Import Transcript").font(.body.bold())
+                            Text("Import transcript").font(.body.bold())
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 18)
                         .foregroundStyle(theme.accent)
@@ -344,12 +347,12 @@ struct OnboardingView: View {
                 HokieIconTile(
                     symbol: hasTranscript ? "checkmark" : "doc.text.fill",
                     color: hasTranscript ? theme.accent : theme.secondaryAccent,
-                    size: 120
+                    size: 88
                 )
 
                 VStack(spacing: 10) {
                     Text(hasTranscript ? "You're all set!" : "Almost there!")
-                        .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                        .font(.largeTitle.weight(.bold))
                     Text(hasTranscript
                          ? "Welcome to Agora\(first.isEmpty ? "!" : ", \(first)!")"
                          : "Import your transcript to unlock your degree audit, personalized course plan, and the full Agora experience.")
@@ -418,7 +421,9 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 14) {
                         HokieIconTile(symbol: icon, color: iconColor, size: 60)
-                        Text(title).font(.system(.largeTitle, design: .serif, weight: .semibold))
+                        Text(title).font(.largeTitle.weight(.bold))
+                            .tracking(-0.4)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(subtitle).font(.body).foregroundStyle(.secondary).lineSpacing(4)
                     }
                     content()
@@ -444,19 +449,21 @@ struct OnboardingView: View {
     private func featurePill(_ icon: String, color: Color, text: String) -> some View {
         HStack(spacing: 12) {
             HokieIconTile(symbol: icon, color: color, size: 36)
-            Text(text).font(.subheadline.bold())
-            Spacer()
+            Text(text).font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .padding(14).glassCapsule(strokeOpacity: 0.08)
+        .padding(12).glassSurface(cornerRadius: AgoraRadius.inset)
     }
 
     private func completionPill(_ icon: String, color: Color, text: String) -> some View {
         HStack(spacing: 12) {
             HokieIconTile(symbol: icon, color: color, size: 32)
-            Text(text).font(.subheadline.bold())
-            Spacer()
+            Text(text).font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .padding(14).glassCapsule(strokeOpacity: 0.08)
+        .padding(12).glassSurface(cornerRadius: AgoraRadius.inset)
     }
 }
 

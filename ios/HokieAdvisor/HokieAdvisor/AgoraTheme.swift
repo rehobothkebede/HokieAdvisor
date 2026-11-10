@@ -46,10 +46,10 @@ extension Color {
 // MARK: - Semantic Palette
 
 enum AgoraPalette {
-    static let background   = Color(light: 0xF7F2E8, dark: 0x0E1522)
-    static let surface      = Color(light: 0xFFFDF8, dark: 0x172133)
-    static let surfaceInset = Color(light: 0xEFE8DA, dark: 0x1E2A3F)
-    static let stroke       = Color(light: 0xDDD3C2, dark: 0x2C3A52)
+    static let background   = Color(light: 0xF6F7F9, dark: 0x10151E)
+    static let surface      = Color(light: 0xFFFFFF, dark: 0x1A222E)
+    static let surfaceInset = Color(light: 0xECEFF3, dark: 0x242E3C)
+    static let stroke       = Color(light: 0xDDE2E9, dark: 0x364151)
     /// Platform-identity ink: wordmark, header mark. Navy on ivory, ivory on navy.
     static let brandInk     = Color(light: 0x1B2A41, dark: 0xF7F2E8)
     static let copper       = Color(light: 0xB06A3B, dark: 0xD08C5C)
@@ -75,8 +75,8 @@ enum AgoraRadius {
 
 // MARK: - Typography
 //
-// Serif is reserved for the wordmark and large brand headings. Everyday text,
-// numbers, code, and math stay on the system font.
+// Serif is reserved for the Agora wordmark. Screen titles, controls, content,
+// numbers, code, and math all use the system font.
 
 extension Font {
     static func agoraDisplay(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
@@ -124,6 +124,8 @@ struct SchoolTheme: Equatable {
     let studentIDLabel: String?
     /// `branding.community_name` in migration 005, e.g. "Hokie".
     let communityName: String?
+    /// Full-screen greeting shown once after an explicit sign-in. `nil` skips it.
+    let welcome: SchoolWelcome?
 
     var isSchool: Bool { slug != nil }
 
@@ -136,7 +138,8 @@ struct SchoolTheme: Equatable {
         onAccent: Color(light: 0xF7F2E8, dark: 0x101A2B),
         secondaryAccent: AgoraPalette.copper,
         studentIDLabel: nil,
-        communityName: nil
+        communityName: nil,
+        welcome: nil
     )
 
     // Values match the VT `branding` seed in migration 005; dark mode lifts the
@@ -150,7 +153,15 @@ struct SchoolTheme: Equatable {
         onAccent: .white,
         secondaryAccent: Color(hex: 0xE5751F),
         studentIDLabel: "PID",
-        communityName: "Hokie"
+        communityName: "Hokie",
+        welcome: SchoolWelcome(
+            headline: "Let\u{2019}s go, Hokies.",
+            supportingText: "You\u{2019}re signed in. Your degree plan is next.",
+            backgroundAsset: "VTWelcomeHokieBird",
+            backgroundTop: Color(hex: 0x861F41),
+            backgroundBottom: Color(hex: 0x2A0915),
+            accent: Color(hex: 0x861F41)
+        )
     )
 
     /// Schools Agora actually supports. Only add a school here once its
@@ -170,6 +181,23 @@ struct SchoolTheme: Equatable {
             school.emailDomains.contains { domain == $0 || domain.hasSuffix(".\($0)") }
         }
     }
+}
+
+// MARK: - Sign-In Welcome
+
+/// Presentation for the post-sign-in welcome. Configure only for schools in
+/// `SchoolTheme.supported`. Copy must not suggest the school endorses Agora.
+struct SchoolWelcome: Equatable {
+    let headline: String
+    let supportingText: String
+    /// Name of an approved, licensed background image in the app bundle. When
+    /// the image isn't bundled, the screen uses the school-color gradient below.
+    let backgroundAsset: String?
+    /// School-color gradient: the fallback background, and a tint under artwork.
+    let backgroundTop: Color
+    let backgroundBottom: Color
+    /// Continue button label color, shown on a white button.
+    let accent: Color
 }
 
 private struct SchoolThemeKey: EnvironmentKey {
@@ -223,7 +251,7 @@ struct AgoraSecondaryButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgoraRadius.control, style: .continuous)
-                    .stroke(AgoraPalette.stroke, lineWidth: 1)
+                    .stroke(AgoraPalette.stroke, lineWidth: 0.75)
             )
             .opacity(configuration.isPressed ? 0.8 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
@@ -251,7 +279,7 @@ extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgoraRadius.control, style: .continuous)
-                    .stroke(AgoraPalette.stroke, lineWidth: 1)
+                    .stroke(AgoraPalette.stroke, lineWidth: 0.75)
             )
     }
 }
