@@ -162,6 +162,89 @@ nonisolated enum CourseCompanionAPI {
         return data
     }
 
+    // MARK: Stage 3
+
+    static func document(_ documentId: String) async throws -> DocumentDetail {
+        struct Payload: Encodable { let documentId: String }
+        return try await call("get_document", Payload(documentId: documentId))
+    }
+
+    static func reviewFact(_ factId: String, decision: String) async throws {
+        struct Payload: Encodable { let factId: String; let decision: String }
+        struct Response: Decodable {}
+        _ = try await call("review_fact", Payload(factId: factId, decision: decision), as: Response.self)
+    }
+
+    static func confirmUnflagged(documentId: String) async throws -> Int {
+        struct Payload: Encodable { let documentId: String }
+        struct Response: Decodable { let confirmed: [String] }
+        return try await call("confirm_unflagged", Payload(documentId: documentId), as: Response.self).confirmed.count
+    }
+
+    struct Correction: Encodable {
+        var date: String?
+        var startTime: String?
+        var endTime: String?
+        var location: String?
+        var weightPercent: Double?
+        var text: String?
+
+        /// Only fields the student set are sent.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encodeIfPresent(date, forKey: .date)
+            try c.encodeIfPresent(startTime, forKey: .startTime)
+            try c.encodeIfPresent(endTime, forKey: .endTime)
+            try c.encodeIfPresent(location, forKey: .location)
+            try c.encodeIfPresent(weightPercent, forKey: .weightPercent)
+            try c.encodeIfPresent(text, forKey: .text)
+        }
+        enum CodingKeys: String, CodingKey { case date, startTime, endTime, location, weightPercent, text }
+    }
+
+    static func correctFact(_ factId: String, correction: Correction, note: String?) async throws {
+        struct Payload: Encodable { let factId: String; let corrected: Correction; let note: String? }
+        struct Response: Decodable {}
+        _ = try await call("correct_fact", Payload(factId: factId, corrected: correction, note: note), as: Response.self)
+    }
+
+    static func removeCorrection(_ factId: String) async throws {
+        struct Payload: Encodable { let factId: String }
+        struct Response: Decodable {}
+        _ = try await call("remove_correction", Payload(factId: factId), as: Response.self)
+    }
+
+    static func completeReview(documentId: String) async throws -> [String] {
+        struct Payload: Encodable { let documentId: String }
+        struct Response: Decodable { let remindersNeedingReconfirm: [String] }
+        return try await call("complete_review", Payload(documentId: documentId), as: Response.self).remindersNeedingReconfirm
+    }
+
+    static func dashboard(courseId: String) async throws -> CourseDashboard {
+        struct Payload: Encodable { let courseId: String }
+        return try await call("course_dashboard", Payload(courseId: courseId))
+    }
+
+    static func addReminder(factId: String, lead: String) async throws -> CourseReminder {
+        struct Payload: Encodable { let factId: String; let lead: String }
+        struct Response: Decodable { let reminder: CourseReminder }
+        return try await call("add_reminder", Payload(factId: factId, lead: lead), as: Response.self).reminder
+    }
+
+    static func deleteReminder(_ reminderId: String) async throws {
+        struct Payload: Encodable { let reminderId: String }
+        _ = try await call("delete_reminder", Payload(reminderId: reminderId), as: DeleteResponse.self)
+    }
+
+    static func resolveReminder(_ reminderId: String, resolution: String) async throws {
+        struct Payload: Encodable { let reminderId: String; let resolution: String }
+        _ = try await call("resolve_reminder", Payload(reminderId: reminderId, resolution: resolution), as: DeleteResponse.self)
+    }
+
+    static func activeReminders() async throws -> [CourseReminder] {
+        try await call("list_reminders", Empty(), as: ReminderListResponse.self).reminders
+    }
+
     /// Uploads the original file with the page text read on this device.
     static func uploadSyllabus(courseId: String, file: Data, mimeType: String, fileName: String,
                                extracted: SyllabusTextExtractor.Result) async throws -> UploadSyllabusResponse {

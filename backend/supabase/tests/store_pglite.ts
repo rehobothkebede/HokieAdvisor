@@ -5,6 +5,7 @@
 
 import type { PGlite } from "npm:@electric-sql/pglite@0.2.17";
 import type {
+  CorrectionRow,
   CourseRow,
   CoursesStore,
   DeadlineRow,
@@ -15,6 +16,8 @@ import type {
   NewCourse,
   NewDocument,
   NewFact,
+  NewReminder,
+  ReminderRow,
   SourceRow,
   TermRow,
   TrustedWriter,
@@ -28,6 +31,8 @@ const DOCUMENT_COLUMNS = `id, course_id, version, storage_path, file_name, mime_
   extracted_at::text, reviewed_at::text, uploaded_at::text`;
 const FACT_COLUMNS = `id, document_id, category, label, value, excerpt, page, qualifiers, evidence, issues,
   review_state, reviewed_at::text, sort_order`;
+
+const REMINDER_COLUMNS = `id, course_id, fact_id, lead, fires_at::text, title, body, dedupe_key, state`;
 
 /** File bytes for local QA; object metadata lives in storage.objects (RLS applies). */
 export const fileBytes = new Map<string, Uint8Array>();
@@ -165,6 +170,68 @@ export class PgliteStore implements CoursesStore {
       [paths],
     );
     for (const row of removed) fileBytes.delete(row.name);
+  }
+
+  // ----- Stage 3 -----
+
+  async getFact(id: string): Promise<FactRow | null> {
+    return (await this.rows<FactRow>(`select ${FACT_COLUMNS} from public.syllabus_facts where id = $1`, [id]))[0] ?? null;
+  }
+
+  async setFactReview(id: string, state: FactRow["review_state"]): Promise<void> {
+    await this.rows(`update public.syllabus_facts set review_state = $2 where id = $1`, [id, state]);
+  }
+
+  listCorrections(documentIds: string[]): Promise<CorrectionRow[]> {
+    if (!documentIds.length) return Promise.resolve([]);
+    return this.rows(
+      `select c.fact_id, c.corrected, c.note, c.updated_at::text
+         from public.syllabus_fact_corrections c
+         join public.syllabus_facts f on f.id = c.fact_id
+        where f.document_id = any($1::uuid[])`,
+      [documentIds],
+    );
+  }
+
+  async upsertCorrection(factId: string, corrected: Record<string, unknown>, note: string | null): Promise<void> {
+    await this.rows(
+      `insert into public.syllabus_fact_corrections (user_id, fact_id, corrected, note)
+       values (auth.uid(), $1, $2::jsonb, $3)
+       on conflict (fact_id) do update set corrected = excluded.corrected, note = excluded.note`,
+      [factId, JSON.stringify(corrected), note],
+    );
+  }
+
+  async deleteCorrection(factId: string): Promise<void> {
+    await this.rows(`delete from public.syllabus_fact_corrections where fact_id = $1`, [factId]);
+  }
+
+  listReminders(courseId: string | null): Promise<ReminderRow[]> {
+    return this.rows(
+      `select ${REMINDER_COLUMNS} from public.course_reminders
+        where ($1::uuid is null or course_id = $1) order by fires_at`,
+      [courseId],
+    );
+  }
+
+  async insertReminder(row: NewReminder): Promise<ReminderRow> {
+    const rows = await this.rows<ReminderRow>(
+      `insert into public.course_reminders (user_id, course_id, fact_id, lead, fires_at, title, body, dedupe_key)
+       values (auth.uid(), $1, $2, $3, $4, $5, $6, $7) returning ${REMINDER_COLUMNS}`,
+      [row.course_id, row.fact_id, row.lead, row.fires_at, row.title, row.body, row.dedupe_key],
+    );
+    return rows[0];
+  }
+
+  async updateReminder(id: string, patch: Partial<NewReminder & { state: ReminderRow["state"] }>): Promise<void> {
+    const entries = Object.entries(patch);
+    if (!entries.length) return;
+    const sets = entries.map(([key], i) => `${key} = $${i + 2}`);
+    await this.rows(`update public.course_reminders set ${sets.join(", ")} where id = $1`, [id, ...entries.map(([, v]) => v)]);
+  }
+
+  async deleteReminder(id: string): Promise<void> {
+    await this.rows(`delete from public.course_reminders where id = $1`, [id]);
   }
 }
 

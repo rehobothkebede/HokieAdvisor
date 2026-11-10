@@ -280,3 +280,230 @@ nonisolated enum ISO8601Timestamp {
         return withFraction.date(from: s) ?? plain.date(from: s)
     }
 }
+
+// MARK: - Review and dashboard (stage 3)
+
+/// A JSON scalar from the server (used for before/after values in changes).
+nonisolated enum JSONScalar: Decodable, Equatable {
+    case string(String), number(Double), bool(Bool), null
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(Double.self) { self = .number(v) }
+        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
+        else { self = .null }
+    }
+
+    var text: String? {
+        switch self {
+        case .string(let s): return s
+        case .number(let n): return n.formatted()
+        case .bool(let b): return b ? "Yes" : "No"
+        case .null: return nil
+        }
+    }
+}
+
+/// What a fact says. Only values stated in the syllabus (or, for
+/// `effective`, the student's own correction) are present.
+nonisolated struct FactValue: Decodable, Equatable {
+    var summary: String?
+    var dateText: String?
+    var date: String?
+    var dateBasis: String?
+    var relativeTiming: String?
+    var startTime: String?
+    var endTime: String?
+    var timeText: String?
+    var timezoneText: String?
+    var recurrenceText: String?
+    var examFormat: String?
+    var weightPercent: Double?
+    var location: String?
+    var appointment: String?
+    var contact: String?
+    var restrictions: [String]?
+
+    var examFormatLabel: String? {
+        switch examFormat {
+        case "online": return "Online"
+        case "in_person": return "In person"
+        case "take_home": return "Take-home"
+        case "proctored": return "Proctored"
+        case "unspecified": return "Format not stated"
+        default: return nil
+        }
+    }
+
+    /// "Thu, Mar 4, 2027" for a confirmed calendar date.
+    var dateLabel: String? { date.map { CalendarDay.text($0, weekday: true) } }
+
+    /// Times exactly as the syllabus gives them, with a stated time zone.
+    var timeLabel: String? {
+        let base: String?
+        if let startTime {
+            base = [startTime, endTime].compactMap { $0.map(Self.clock) }.joined(separator: "–")
+        } else {
+            base = timeText
+        }
+        guard let base else { return nil }
+        return timezoneText.map { "\(base) \($0)" } ?? base
+    }
+
+    static func clock(_ hhmm: String) -> String {
+        let parts = hhmm.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return hhmm }
+        let hour = (parts[0] + 11) % 12 + 1
+        return "\(hour):\(String(format: "%02d", parts[1])) \(parts[0] >= 12 ? "PM" : "AM")"
+    }
+}
+
+nonisolated struct FactCorrection: Decodable, Equatable {
+    let corrected: [String: JSONScalar]
+    let note: String?
+}
+
+nonisolated struct SyllabusFact: Decodable, Identifiable, Equatable {
+    let id: String
+    let documentId: String
+    let category: String
+    let label: String
+    let value: FactValue
+    let excerpt: String
+    let page: Int
+    let qualifiers: [String]
+    /// verified, other_page, approximate, or not_found.
+    let evidence: String
+    let issues: [String]
+    let reviewState: String
+    /// Dashboard only: value with the student's correction applied.
+    let effective: FactValue?
+    let correction: FactCorrection?
+
+    var shown: FactValue { effective ?? value }
+    var isDated: Bool { category == "exam" || category == "assignment_deadline" }
+    var isBlocked: Bool { issues.contains("other_term") }
+    var needsCorrectionToConfirm: Bool { evidence == "not_found" }
+}
+
+nonisolated struct CorrectionRecord: Decodable, Equatable {
+    let factId: String
+    let corrected: [String: JSONScalar]
+    let note: String?
+}
+
+nonisolated struct FieldChange: Decodable, Equatable {
+    let field: String
+    let before: JSONScalar
+    let after: JSONScalar
+}
+
+nonisolated struct FactChange: Decodable, Equatable, Identifiable {
+    var id: String { factId ?? "\(category)-\(label)" }
+    let factId: String?
+    let category: String
+    let label: String
+    let fields: [FieldChange]?
+    let affectedReminderIds: [String]?
+}
+
+nonisolated struct DocumentChanges: Decodable, Equatable {
+    let comparedWithVersion: Int
+    let changed: [FactChange]
+    let added: [FactChange]
+    let removed: [FactChange]
+}
+
+nonisolated struct DocumentDetail: Decodable {
+    let document: SyllabusDocumentSummary
+    let course: EnrolledCourse
+    let facts: [SyllabusFact]
+    let corrections: [CorrectionRecord]
+    let changes: DocumentChanges?
+
+    func correction(for fact: SyllabusFact) -> CorrectionRecord? { corrections.first { $0.factId == fact.id } }
+}
+
+nonisolated struct CourseReminder: Decodable, Identifiable, Equatable {
+    let id: String
+    let courseId: String
+    let factId: String
+    let lead: String
+    let firesAt: String
+    let title: String
+    let body: String
+    /// active or needs_reconfirm.
+    let state: String
+
+    var leadLabel: String {
+        switch lead {
+        case "week_before": return "A week before"
+        case "day_before": return "The day before"
+        default: return "The morning of"
+        }
+    }
+}
+
+nonisolated struct CourseDashboard: Decodable {
+    let course: EnrolledCourse
+    let termTimezone: String
+    let currentDocument: SyllabusDocumentSummary?
+    let pendingDocument: SyllabusDocumentSummary?
+    let facts: [SyllabusFact]
+    let next: SyllabusFact?
+    let undated: [SyllabusFact]
+    let reminders: [CourseReminder]
+
+    func facts(_ categories: Set<String>) -> [SyllabusFact] { facts.filter { categories.contains($0.category) } }
+}
+
+nonisolated struct ReminderListResponse: Decodable {
+    let reminders: [CourseReminder]
+}
+
+/// Plain-language explanations for review flags.
+nonisolated enum FactIssue {
+    static func text(_ issue: String, fact: SyllabusFact) -> String? {
+        switch issue {
+        case "excerpt_not_found": return "Agora couldn’t find this in the document. It may be a reading error."
+        case "page_corrected": return "Found on page \(fact.page), not the page Agora first expected."
+        case "approximate_match": return "Matched approximately: the file’s text order differs. Compare with the page."
+        case "value_not_in_excerpt": return "This value isn’t in the quoted text. Check it against the page."
+        case "year_from_term": return "The syllabus doesn’t give a year. Agora used the term’s year."
+        case "invalid_date": return "This isn’t a real calendar date."
+        case "date_outside_term": return "This date falls outside the term."
+        case "weekday_mismatch": return "The weekday and the date don’t match."
+        case "relative_date": return "No calendar date. The syllabus says “\(fact.value.relativeTiming ?? "")”."
+        case "ambiguous_date": return "The date isn’t clear."
+        case "other_term": return "From another term’s syllabus, so it can’t be used."
+        case "timezone_unstated": return "No time zone given for an online or take-home exam."
+        case "conflicting": return "The syllabus says different things about this."
+        default: return nil
+        }
+    }
+}
+
+nonisolated enum FactCategory {
+    static func title(_ category: String) -> String {
+        switch category {
+        case "exam": return "Exams"
+        case "assignment_deadline": return "Deadlines"
+        case "office_hours": return "Office hours"
+        case "contact": return "Contact"
+        case "attendance": return "Attendance"
+        case "participation": return "Participation"
+        case "grading_weight": return "Grading"
+        case "late_work": return "Late work"
+        case "makeup": return "Makeup work"
+        case "materials": return "Required materials"
+        case "requirement": return "Other requirements"
+        case "restriction": return "Rules"
+        default: return category.capitalized
+        }
+    }
+
+    static let order = ["exam", "assignment_deadline", "grading_weight", "office_hours", "contact", "attendance",
+                        "participation", "late_work", "makeup", "materials", "requirement", "restriction"]
+}

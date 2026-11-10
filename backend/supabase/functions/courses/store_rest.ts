@@ -5,6 +5,7 @@
 // confirmed (with the student's token) that the course and document are theirs.
 
 import type {
+  CorrectionRow,
   CourseRow,
   CoursesStore,
   DeadlineRow,
@@ -15,6 +16,8 @@ import type {
   NewCourse,
   NewDocument,
   NewFact,
+  NewReminder,
+  ReminderRow,
   SourceRow,
   TermRow,
   TrustedWriter,
@@ -27,6 +30,8 @@ const DOCUMENT_COLUMNS =
   "processing_state,error_code,findings,stated_identity,extraction_model,extracted_at,reviewed_at,uploaded_at";
 const FACT_COLUMNS =
   "id,document_id,category,label,value,excerpt,page,qualifiers,evidence,issues,review_state,reviewed_at,sort_order";
+
+const REMINDER_COLUMNS = "id,course_id,fact_id,lead,fires_at,title,body,dedupe_key,state";
 
 function storagePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
@@ -184,6 +189,59 @@ export class RestStore implements CoursesStore {
       body: JSON.stringify({ prefixes: paths }),
     });
     if (!response.ok) throw new Error(`Storage delete failed: ${response.status}`);
+  }
+
+  // ----- Stage 3 (student's token; RLS and column grants apply) -----
+
+  async getFact(id: string): Promise<FactRow | null> {
+    const rows = await this.rest<FactRow[]>(`syllabus_facts?select=${FACT_COLUMNS}&id=eq.${id}`);
+    return rows[0] ?? null;
+  }
+
+  async setFactReview(id: string, state: FactRow["review_state"]): Promise<void> {
+    await this.rest(`syllabus_facts?id=eq.${id}`, { method: "PATCH", body: JSON.stringify({ review_state: state }) });
+  }
+
+  listCorrections(documentIds: string[]): Promise<CorrectionRow[]> {
+    if (!documentIds.length) return Promise.resolve([]);
+    return this.rest(
+      `syllabus_fact_corrections?select=fact_id,corrected,note,updated_at,syllabus_facts!inner(document_id)` +
+        `&syllabus_facts.document_id=in.(${documentIds.join(",")})`,
+    );
+  }
+
+  async upsertCorrection(factId: string, corrected: Record<string, unknown>, note: string | null): Promise<void> {
+    await this.rest(`syllabus_fact_corrections?on_conflict=fact_id`, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({ user_id: this.userId, fact_id: factId, corrected, note }),
+    });
+  }
+
+  async deleteCorrection(factId: string): Promise<void> {
+    await this.rest(`syllabus_fact_corrections?fact_id=eq.${factId}`, { method: "DELETE" });
+  }
+
+  listReminders(courseId: string | null): Promise<ReminderRow[]> {
+    const filter = courseId ? `&course_id=eq.${courseId}` : "";
+    return this.rest(`course_reminders?select=${REMINDER_COLUMNS}${filter}&order=fires_at`);
+  }
+
+  async insertReminder(row: NewReminder): Promise<ReminderRow> {
+    const rows = await this.rest<ReminderRow[]>(`course_reminders?select=${REMINDER_COLUMNS}`, {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ ...row, user_id: this.userId }),
+    });
+    return rows[0];
+  }
+
+  async updateReminder(id: string, patch: Partial<NewReminder & { state: ReminderRow["state"] }>): Promise<void> {
+    await this.rest(`course_reminders?id=eq.${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  async deleteReminder(id: string): Promise<void> {
+    await this.rest(`course_reminders?id=eq.${id}`, { method: "DELETE" });
   }
 }
 

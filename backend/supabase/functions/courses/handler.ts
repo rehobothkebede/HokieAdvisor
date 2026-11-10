@@ -3,6 +3,7 @@
 // runs in the edge function, in tests, and in the local QA server.
 
 import type { Extractor } from "./extraction.ts";
+import * as review from "./review.ts";
 import * as syllabi from "./syllabi.ts";
 import {
   type CoursesStore,
@@ -55,6 +56,26 @@ export async function handleAction(
         return ok(await syllabi.documentFile(body, deps));
       case "delete_document":
         return ok(await syllabi.deleteDocument(body, deps));
+      case "review_fact":
+        return ok(await review.reviewFact(body, deps));
+      case "confirm_unflagged":
+        return ok(await review.confirmUnflagged(body, deps));
+      case "correct_fact":
+        return ok(await review.correctFact(body, deps));
+      case "remove_correction":
+        return ok(await review.removeCorrection(body, deps));
+      case "complete_review":
+        return ok(await review.completeReview(body, deps));
+      case "course_dashboard":
+        return ok(await review.courseDashboard(body, deps));
+      case "add_reminder":
+        return ok(await review.addReminder(body, deps));
+      case "delete_reminder":
+        return ok(await review.deleteReminder(body, deps));
+      case "resolve_reminder":
+        return ok(await review.resolveReminder(body, deps));
+      case "list_reminders":
+        return ok(await review.listReminders(deps));
       default:
         throw new HandlerError(400, "COURSES_UNKNOWN_ACTION", "Unknown action.");
     }

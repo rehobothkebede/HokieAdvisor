@@ -62,6 +62,7 @@ final class CourseCompanionStore: ObservableObject {
             coursesTermKey = result.termKey
             coursesError = nil
             await CourseReminderScheduler.reconcileSyllabusReminders(termKey: termKey, courses: result.courses)
+            await reconcileReminders()
         } catch {
             coursesError = error.localizedDescription
         }
@@ -82,6 +83,8 @@ final class CourseCompanionStore: ObservableObject {
 
     func deleteDocument(_ document: SyllabusDocumentSummary) async throws {
         let result = try await CourseCompanionAPI.deleteDocument(documentId: document.id)
+        fileCache[document.id] = nil
+        dashboards[document.courseId] = nil
         CourseReminderScheduler.remove(identifiers: (result.deletedReminderIds ?? []).map(CourseReminderScheduler.factIdentifier))
         await loadCourses(force: true)
     }
@@ -119,6 +122,47 @@ final class CourseCompanionStore: ObservableObject {
         await loadCourses(force: true)
         return response
     }
+
+    // MARK: - Review and dashboard (stage 3)
+
+    @Published private(set) var dashboards: [String: CourseDashboard] = [:]
+    private var fileCache: [String: Data] = [:]
+
+    func loadDashboard(courseId: String) async throws {
+        dashboards[courseId] = try await CourseCompanionAPI.dashboard(courseId: courseId)
+    }
+
+    /// The original upload, kept in memory for this session only.
+    func documentFile(_ documentId: String) async throws -> Data {
+        if let cached = fileCache[documentId] { return cached }
+        let data = try await CourseCompanionAPI.documentFile(documentId: documentId)
+        fileCache[documentId] = data
+        return data
+    }
+
+    func addReminder(fact: SyllabusFact, lead: String) async throws -> Bool {
+        let allowed = await CourseReminderScheduler.requestPermission()
+        let reminder = try await CourseCompanionAPI.addReminder(factId: fact.id, lead: lead)
+        if allowed { await CourseReminderScheduler.scheduleFactReminder(reminder) }
+        return allowed
+    }
+
+    func deleteReminder(_ reminder: CourseReminder) async throws {
+        try await CourseCompanionAPI.deleteReminder(reminder.id)
+        CourseReminderScheduler.remove(identifiers: [CourseReminderScheduler.factIdentifier(reminder.id)])
+    }
+
+    func resolveReminder(_ reminder: CourseReminder, moveToNewDate: Bool) async throws {
+        try await CourseCompanionAPI.resolveReminder(reminder.id, resolution: moveToNewDate ? "update" : "remove")
+        await reconcileReminders()
+    }
+
+    func reconcileReminders() async {
+        guard let active = try? await CourseCompanionAPI.activeReminders() else { return }
+        await CourseReminderScheduler.reconcileFactReminders(active)
+    }
+
+    func deleteDocumentCache(_ documentId: String) { fileCache[documentId] = nil }
 
     func load(force: Bool = false) async {
         guard isAvailable else { return }

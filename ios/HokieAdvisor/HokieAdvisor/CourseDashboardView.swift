@@ -16,6 +16,17 @@ struct CourseDashboardView: View {
     @State private var confirmDeleteCourse = false
     @State private var documentToDelete: SyllabusDocumentSummary?
     @State private var notice: String?
+    @State private var reviewDocumentId: ReviewTarget?
+    @State private var pageRequest: PageRequest?
+
+    private struct ReviewTarget: Identifiable { let id: String }
+    private struct PageRequest: Identifiable {
+        let id = UUID()
+        let documentId: String
+        let mimeType: String
+        let page: Int
+        let excerpt: String?
+    }
 
     private var course: EnrolledCourse? { store.course(courseId) }
     private var isUploading: Bool { store.uploading.contains(courseId) }
@@ -28,6 +39,17 @@ struct CourseDashboardView: View {
                     if let notice { noticeBanner(notice) }
                     if let errorMessage { errorBanner(errorMessage) }
                     setupCard(course)
+                    if course.status == .ready || course.status == .updateAvailable {
+                        if let dashboard = store.dashboards[course.id] {
+                            CourseDashboardSections(
+                                dashboard: dashboard,
+                                onViewPage: { pageRequest = PageRequest(documentId: $0, mimeType: $1, page: $2, excerpt: $3) },
+                                onReviewUpdate: { reviewDocumentId = ReviewTarget(id: $0) }
+                            )
+                        } else {
+                            ProgressView().frame(maxWidth: .infinity)
+                        }
+                    }
                     if !course.documents.isEmpty { versions(course) }
                     removeCourseButton
                     Spacer(minLength: HokieChrome.contentBottomInset)
@@ -45,7 +67,28 @@ struct CourseDashboardView: View {
         .navigationTitle(course?.code ?? "Course")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .refreshable { await store.loadCourses(force: true) }
+        .refreshable {
+            await store.loadCourses(force: true)
+            try? await store.loadDashboard(courseId: courseId)
+        }
+        .task(id: course?.status) {
+            #if DEBUG
+            openQAReviewIfRequested()
+            #endif
+            guard let course, course.status == .ready || course.status == .updateAvailable else { return }
+            do { try await store.loadDashboard(courseId: course.id) } catch { errorMessage = error.localizedDescription }
+        }
+        .fullScreenCover(item: $reviewDocumentId) { target in
+            SyllabusReviewView(documentId: target.id) {
+                Task { try? await store.loadDashboard(courseId: courseId) }
+            }
+            .environmentObject(store)
+            .environment(\.schoolTheme, theme)
+        }
+        .sheet(item: $pageRequest) { request in
+            SyllabusPageView(documentId: request.documentId, mimeType: request.mimeType, page: request.page, excerpt: request.excerpt)
+                .environmentObject(store)
+        }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.pdf, .png, .jpeg]) { result in
             if case .success(let url) = result { Task { await upload(url: url) } }
         }
@@ -120,11 +163,8 @@ struct CourseDashboardView: View {
             case .reviewNeeded:
                 reviewCard(course, title: "Review needed",
                            detail: "Check what Agora found against your syllabus. Syllabus-based guidance for this course turns on after you review it.")
-            case .updateAvailable:
-                reviewCard(course, title: "Updated version available",
-                           detail: "You uploaded a new version. Your confirmed details stay in place until you review the changes.")
-            case .ready, .processing:
-                EmptyView()
+            case .updateAvailable, .ready, .processing:
+                EmptyView() // The dashboard shows a pending update itself.
             }
         }
     }
@@ -178,6 +218,10 @@ struct CourseDashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let pending = course.pendingDocumentId {
+                    Button("Review now") { reviewDocumentId = ReviewTarget(id: pending) }
+                        .buttonStyle(.agoraPrimary)
+                }
             }
         }
     }
@@ -318,6 +362,12 @@ struct CourseDashboardView: View {
     }
 
     #if DEBUG
+    /// `-AgoraOpenReview` opens the pending review for visual QA.
+    private func openQAReviewIfRequested() {
+        guard ProcessInfo.processInfo.arguments.contains("-AgoraOpenReview"), let pending = course?.pendingDocumentId else { return }
+        reviewDocumentId = ReviewTarget(id: pending)
+    }
+
     /// `-AgoraQAUploadFile <path>` uploads a local QA file through the same
     /// path as the file picker, since the simulator tools here can't tap.
     private func runQAUploadIfRequested() async {

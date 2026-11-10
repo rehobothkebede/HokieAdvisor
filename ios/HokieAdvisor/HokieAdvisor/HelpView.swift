@@ -101,6 +101,38 @@ struct HelpView: View {
                     """
                 ),
             ]),
+            Topic(title: "Courses and syllabi", entries: [
+                Entry(
+                    question: "Where do registration dates come from?",
+                    answer: """
+                    From your school's official pages. Each date shows its source and when Agora last checked it. If an official page differs from what Agora shows, follow the official page.
+
+                    Agora can't register, drop, or withdraw you. Use your school's registration system and official forms.
+                    """
+                ),
+                Entry(
+                    question: "Who can see my syllabi?",
+                    answer: """
+                    Only you. Uploaded syllabi and the details read from them are private to your account and aren't shared with other students.
+
+                    Agora reads the syllabus text on your device and sends that text to its AI provider to find dates and policies. You review everything before Agora uses it, and your corrections are kept separate from what the document says.
+                    """
+                ),
+                Entry(
+                    question: "Why does Agora need a reviewed syllabus?",
+                    answer: """
+                    Exam dates, office hours, and policies can differ by section and term. Agora uses only details you've checked against your own section's syllabus, and it never turns phrases like "Week 6" into a date for you. Without a reviewed syllabus, the rest of Agora still works.
+                    """
+                ),
+                Entry(
+                    question: "What happens when I delete a syllabus?",
+                    answer: """
+                    Deleting a syllabus version removes the file, the details read from it, your corrections, and its reminders from Agora's active systems right away, and cancels its notifications on this device. Removing a course or deleting your account does the same for every version.
+
+                    Copies can remain in the database provider's backups until those backups expire on their own schedule. Agora can't remove individual items from backups.
+                    """
+                ),
+            ]),
             Topic(title: "Account and data", entries: [
                 Entry(
                     question: "What do Sign Out, Clear Local Data, and Reset Account do?",
@@ -109,7 +141,7 @@ struct HelpView: View {
 
                     Clear Local Data removes your transcript, academic data, saved chats, and memories from this device, then signs you out. Data saved to your account is not deleted.
 
-                    Reset Account & Restart asks Agora's server to delete your account. Your profile, imported transcript and audit results, saved chats, and memories are stored with that account and are removed with it. The app then returns to the start.
+                    Reset Account & Restart asks Agora's server to delete your account. Your profile, imported transcript and audit results, saved chats, memories, and uploaded syllabi are stored with that account and are removed with it. The app then returns to the start.
                     """
                 ),
             ]),

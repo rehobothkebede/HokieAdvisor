@@ -140,8 +140,40 @@ export interface CoursesStore {
   getFile(path: string): Promise<Uint8Array>;
   removeFiles(paths: string[]): Promise<void>;
 
+  // Stage 3: review, corrections, reminders (all RLS-scoped to the student).
+  getFact(id: string): Promise<FactRow | null>;
+  setFactReview(id: string, state: FactRow["review_state"]): Promise<void>;
+  listCorrections(documentIds: string[]): Promise<CorrectionRow[]>;
+  upsertCorrection(factId: string, corrected: Record<string, unknown>, note: string | null): Promise<void>;
+  deleteCorrection(factId: string): Promise<void>;
+  listReminders(courseId: string | null): Promise<ReminderRow[]>;
+  insertReminder(row: NewReminder): Promise<ReminderRow>;
+  updateReminder(id: string, patch: Partial<NewReminder & { state: ReminderRow["state"] }>): Promise<void>;
+  deleteReminder(id: string): Promise<void>;
+
   trusted: TrustedWriter;
 }
+
+export type CorrectionRow = {
+  fact_id: string;
+  corrected: Record<string, unknown>;
+  note: string | null;
+  updated_at: string;
+};
+
+export type ReminderRow = {
+  id: string;
+  course_id: string;
+  fact_id: string;
+  lead: "week_before" | "day_before" | "morning_of";
+  fires_at: string;
+  title: string;
+  body: string;
+  dedupe_key: string;
+  state: "active" | "needs_reconfirm";
+};
+
+export type NewReminder = Omit<ReminderRow, "id" | "state">;
 
 export type HandlerResult = { status: number; body: unknown };
 

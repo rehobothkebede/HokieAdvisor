@@ -3,6 +3,7 @@
 import type { Deps } from "./handler.ts";
 import { localDate, stringField } from "./handler.ts";
 import { type PageText, verifyExtraction } from "./extraction.ts";
+import { documentChanges, reminderIdsForDocuments } from "./review.ts";
 import { type CourseRow, type DocumentRow, HandlerError, type TermRow } from "./types.ts";
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -83,10 +84,11 @@ export async function setSyllabusReminder(body: Record<string, unknown>, deps: D
 export async function deleteCourse(body: Record<string, unknown>, deps: Deps) {
   const course = await ownedCourse(stringField(body, "course_id"), deps);
   const documents = await deps.store.listDocuments([course.id]);
+  const reminderIds = await reminderIdsForDocuments(documents.map((d) => d.id), deps);
   // Files first: if that fails nothing is deleted, so no file is ever orphaned.
   if (documents.length) await deps.store.removeFiles(documents.map((d) => d.storage_path));
-  await deps.store.deleteCourse(course.id);
-  return { deleted_course_id: course.id, deleted_document_ids: documents.map((d) => d.id) };
+  await deps.store.deleteCourse(course.id); // cascades documents, facts, corrections, reminders
+  return { deleted_course_id: course.id, deleted_document_ids: documents.map((d) => d.id), deleted_reminder_ids: reminderIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +198,8 @@ export async function getDocument(body: Record<string, unknown>, deps: Deps) {
     document: documentDTO(document),
     course: courseDTO(course, term, await deps.store.listDocuments([course.id])),
     facts: await deps.store.listFacts(document.id),
+    corrections: await deps.store.listCorrections([document.id]),
+    changes: document.processing_state === "review_needed" ? await documentChanges(document, deps) : null,
   };
 }
 
@@ -207,9 +211,10 @@ export async function documentFile(body: Record<string, unknown>, deps: Deps) {
 
 export async function deleteDocument(body: Record<string, unknown>, deps: Deps) {
   const document = await ownedDocument(stringField(body, "document_id"), deps);
+  const reminderIds = await reminderIdsForDocuments([document.id], deps);
   await deps.store.removeFiles([document.storage_path]);
-  await deps.store.deleteDocument(document.id); // cascades extracted facts
-  return { deleted_document_id: document.id };
+  await deps.store.deleteDocument(document.id); // cascades facts, corrections, reminders
+  return { deleted_document_id: document.id, deleted_reminder_ids: reminderIds };
 }
 
 // ---------------------------------------------------------------------------

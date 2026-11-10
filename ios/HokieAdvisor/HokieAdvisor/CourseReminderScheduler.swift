@@ -49,6 +49,34 @@ enum CourseReminderScheduler {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
+    /// Schedules a reminder for a confirmed date. Same identifier = replaced,
+    /// never duplicated.
+    static func scheduleFactReminder(_ reminder: CourseReminder) async {
+        guard reminder.state == "active", let fireDate = ISO8601Timestamp.date(reminder.firesAt), fireDate > Date() else { return }
+        let content = UNMutableNotificationContent()
+        content.title = reminder.title
+        content.body = reminder.body
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+        let request = UNNotificationRequest(
+            identifier: factIdentifier(reminder.id),
+            content: content,
+            trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        )
+        try? await center.add(request)
+    }
+
+    /// Makes this device's scheduled date reminders match the server's active ones.
+    static func reconcileFactReminders(_ active: [CourseReminder]) async {
+        let wanted = Dictionary(uniqueKeysWithValues: active.filter { $0.state == "active" }.map { (factIdentifier($0.id), $0) })
+        let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix("agora.fact.") }
+        remove(identifiers: pending.filter { wanted[$0] == nil })
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+        for (identifier, reminder) in wanted where !pending.contains(identifier) {
+            await scheduleFactReminder(reminder)
+        }
+    }
+
     /// Makes pending syllabus reminders for a term match the server.
     static func reconcileSyllabusReminders(termKey: String, courses: [EnrolledCourse]) async {
         let prefix = "agora.syllabus.\(termKey)."
