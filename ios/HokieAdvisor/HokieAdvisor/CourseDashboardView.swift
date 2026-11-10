@@ -32,6 +32,7 @@ struct CourseDashboardView: View {
     private var isUploading: Bool { store.uploading.contains(courseId) }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             if let course {
                 VStack(alignment: .leading, spacing: AgoraSpacing.xl) {
@@ -50,7 +51,7 @@ struct CourseDashboardView: View {
                             ProgressView().frame(maxWidth: .infinity)
                         }
                     }
-                    if !course.documents.isEmpty { versions(course) }
+                    if !course.documents.isEmpty { versions(course).id("versions") }
                     removeCourseButton
                     Spacer(minLength: HokieChrome.contentBottomInset)
                 }
@@ -61,6 +62,12 @@ struct CourseDashboardView: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 80)
             }
+        }
+        #if DEBUG
+        .onChange(of: store.dashboards[courseId] != nil) { _, loaded in
+            if loaded { runQADashboardHooks(proxy) }
+        }
+        #endif
         }
         .scrollIndicators(.hidden)
         .hokieScreenBackground()
@@ -362,6 +369,22 @@ struct CourseDashboardView: View {
     }
 
     #if DEBUG
+    /// `-AgoraScrollTo <grading|policies|versions>` scrolls the dashboard and
+    /// `-AgoraOpenPage "<fact label>"` opens that fact's original page, for
+    /// visual QA (the simulator tools here can't scroll or tap).
+    private func runQADashboardHooks(_ proxy: ScrollViewProxy) {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-AgoraScrollTo"), args.indices.contains(i + 1) {
+            let target = args[i + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { proxy.scrollTo(target, anchor: .top) }
+        }
+        if let i = args.firstIndex(of: "-AgoraOpenPage"), args.indices.contains(i + 1),
+           let dashboard = store.dashboards[courseId], let document = dashboard.currentDocument,
+           let fact = dashboard.facts.first(where: { $0.label.localizedCaseInsensitiveContains(args[i + 1]) }) {
+            pageRequest = PageRequest(documentId: document.id, mimeType: document.mimeType, page: fact.page, excerpt: fact.excerpt)
+        }
+    }
+
     /// `-AgoraOpenReview` opens the pending review for visual QA.
     private func openQAReviewIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-AgoraOpenReview"), let pending = course?.pendingDocumentId else { return }

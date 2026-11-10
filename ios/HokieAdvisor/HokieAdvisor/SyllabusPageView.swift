@@ -70,11 +70,17 @@ private struct PDFPageRepresentable: UIViewRepresentable {
         if let document = PDFDocument(data: data) {
             view.document = document
             if let target = document.page(at: max(0, page - 1)) {
-                view.go(to: target)
-                if let selection = Self.selection(for: excerpt, in: document, on: target) {
+                let selection = Self.selection(for: excerpt, in: document, on: target)
+                if let selection {
                     selection.color = UIColor.systemYellow.withAlphaComponent(0.45)
                     view.highlightedSelections = [selection]
-                    view.go(to: selection)
+                }
+                // PDFView ignores navigation before its first layout pass, so
+                // jump to the cited page once it has a size.
+                DispatchQueue.main.async {
+                    view.layoutIfNeeded()
+                    view.go(to: target)
+                    if let selection { view.go(to: selection) }
                 }
             }
         }

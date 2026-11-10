@@ -23,8 +23,8 @@ struct CourseDashboardSections: View {
             nextCard
             datedSection
             if !dashboard.undated.isEmpty { undatedSection }
-            gradingSection
-            factSection("Office hours and contact", categories: ["office_hours", "contact"])
+            gradingSection.id("grading")
+            factSection("Office hours and contact", categories: ["office_hours", "contact"]).id("policies")
             factSection("Attendance and participation", categories: ["attendance", "participation"])
             factSection("Late work and makeups", categories: ["late_work", "makeup"])
             factSection("Materials and requirements", categories: ["materials", "requirement", "restriction"])
