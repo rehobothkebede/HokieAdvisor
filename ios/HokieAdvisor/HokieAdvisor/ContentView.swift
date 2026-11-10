@@ -647,8 +647,8 @@ struct DegreeAuditView: View {
         if let program = darsVM.audit?.program, !program.isEmpty {
             return program
         }
-        if let audit = vm.audit {
-            return "\(audit.major) \(audit.degree)"
+        if let audit = vm.audit, let line = ProgramName.line(major: audit.major, degree: audit.degree) {
+            return line
         }
         return appState.major.isEmpty ? "Requirements, credits, and what's left." : appState.major
     }
@@ -1263,7 +1263,7 @@ struct AuditSummaryCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(audit.major) \(audit.degree)")
+                    Text(ProgramName.title(major: audit.major, degree: audit.degree))
                         .font(.headline)
                         .fixedSize(horizontal: false, vertical: true)
                     Text([schoolName, "Catalog \(audit.catalogYear)"].compactMap { $0 }.joined(separator: " · "))

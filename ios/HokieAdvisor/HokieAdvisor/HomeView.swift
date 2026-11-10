@@ -125,16 +125,12 @@ struct HomeView: View {
 
     /// Program from the latest audit when one exists, else the profile major.
     private var programLine: String {
-        var parts: [String] = []
-        if let audit = appState.latestDegreeAudit {
-            parts.append("\(audit.major) \(audit.degree)")
-        } else if !appState.major.isEmpty {
-            parts.append(appState.major)
-        }
-        if !graduationYear.isEmpty {
-            parts.append("Class of \(graduationYear)")
-        }
-        return parts.isEmpty ? AgoraBrand.supportingLine : parts.joined(separator: " · ")
+        let audit = appState.latestDegreeAudit
+        return ProgramName.line(
+            major: audit?.major ?? appState.major,
+            degree: audit?.degree ?? "",
+            graduationYear: graduationYear
+        ) ?? AgoraBrand.supportingLine
     }
 
     // MARK: - Next Step
