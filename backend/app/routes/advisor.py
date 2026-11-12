@@ -1,9 +1,11 @@
 import logging
 import asyncio
 from typing import Optional
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, Depends
 from pydantic import BaseModel
 from app.routes.errors import error_detail
+from app.services import ai_guard
+from app.services.ai_guard import VerifiedUser, require_user
 from app.services.ai_service import recommend_courses
 from app.services.dars_audit_service import parse_dars_audit
 from app.services.degree_audit_service import run_degree_audit
@@ -115,7 +117,7 @@ class DarsAuditResponse(BaseModel):
 
 
 @router.post("/plan", response_model=PlanResponse)
-def get_plan(request: PlanRequest):
+def get_plan(request: PlanRequest, user: VerifiedUser = Depends(require_user)):
     """
     Generate a personalized course plan for the next semester.
 
@@ -144,7 +146,8 @@ def get_plan(request: PlanRequest):
         logger.warning("Catalog fetch failed for '%s': %s — continuing without catalog", request.major, e)
         major_requirements = None
 
-    # 3. Ask AI to build the plan
+    # 3. Ask AI to build the plan (one paid call, from the chat allowance)
+    ai_guard.reserve(user, "chat")
     try:
         result = recommend_courses(
             completed_courses=request.completed_courses,
@@ -154,8 +157,12 @@ def get_plan(request: PlanRequest):
             available_courses=available_courses,
             major_requirements=major_requirements,
         )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=error_detail("PLAN_AI_REQUEST_FAILED", f"AI service error: {str(e)}"))
+    except Exception:
+        logger.warning("Legacy plan AI request failed")
+        raise HTTPException(
+            status_code=502,
+            detail=error_detail("PLAN_AI_REQUEST_FAILED", "We could not build a plan right now. Please try again."),
+        ) from None
 
     return PlanResponse(**result)
 
@@ -176,13 +183,13 @@ def get_degree_audit(request: DegreeAuditRequest):
         raise HTTPException(status_code=400, detail=error_detail("AUDIT_INVALID_REQUEST", str(e)))
     except Exception as e:
         logger.exception("Degree audit failed")
-        raise HTTPException(status_code=500, detail=error_detail("AUDIT_FAILED", f"Degree audit failed: {str(e)}"))
+        raise HTTPException(status_code=500, detail=error_detail("AUDIT_FAILED", "The degree audit failed. Please try again.")) from None
 
     return DegreeAuditResponse(**result)
 
 
 @router.post("/dars/upload", response_model=DarsAuditResponse)
-async def upload_dars_audit(file: UploadFile = File(...)):
+async def upload_dars_audit(file: UploadFile = File(...), user: VerifiedUser = Depends(require_user)):
     """Parse an official uAchieve/DARS audit export or screenshot."""
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in _ALLOWED_AUDIT_TYPES:
@@ -201,13 +208,24 @@ async def upload_dars_audit(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=error_detail("DARS_FILE_EMPTY", "Uploaded file is empty."))
 
     try:
-        result = await asyncio.to_thread(parse_dars_audit, file_bytes, content_type)
+        result = await asyncio.to_thread(
+            parse_dars_audit, file_bytes, content_type, lambda: ai_guard.reserve(user, "document")
+        )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=422, detail=error_detail("DARS_PARSE_FAILED", str(e)))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=error_detail("DARS_AI_REQUEST_FAILED", str(e)))
-    except Exception as e:
+    except RuntimeError:
+        logger.warning("Legacy DARS AI request failed")
+        raise HTTPException(
+            status_code=502,
+            detail=error_detail("DARS_AI_REQUEST_FAILED", "We could not read your DARS audit right now. Please try again."),
+        ) from None
+    except Exception:
         logger.exception("DARS audit parse failed")
-        raise HTTPException(status_code=500, detail=error_detail("DARS_PARSE_FAILED", f"DARS audit parse failed: {str(e)}"))
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail("DARS_PARSE_FAILED", "We could not read your DARS audit. Please try again."),
+        ) from None
 
     return DarsAuditResponse(**result)

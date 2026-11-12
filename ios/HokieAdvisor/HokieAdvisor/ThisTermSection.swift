@@ -49,7 +49,8 @@ struct ThisTermSection: View {
     private var stateContent: some View {
         Group {
             switch store.state {
-            case .idle, .loading where store.overview == nil:
+            case .idle where store.overview == nil,
+                 .loading where store.overview == nil:
                 placeholder
             case .unsupported:
                 EmptyView() // No dead ends for schools Agora doesn't cover yet.
@@ -84,12 +85,24 @@ struct ThisTermSection: View {
                 }
             }
             .glassSurface(cornerRadius: AgoraRadius.card)
-        } else if let error = store.coursesError {
-            Text("Couldn’t load your courses. \(error)")
+        }
+        if let error = store.coursesError {
+            VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
+                Text(courses.isEmpty ? "Couldn’t load your courses." : "Couldn’t refresh your courses. Showing the last loaded list.")
+                    .font(.subheadline.weight(.medium))
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Retry") { Task { await store.loadCourses(force: true) } }
+                    .frame(minHeight: 44)
+                    .disabled(store.isLoadingCourses)
+                    .accessibilityLabel("Retry loading courses")
+            }
+        } else if store.isLoadingCourses && courses.isEmpty {
+            ProgressView("Loading courses…")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if !store.isLoadingCourses {
+        } else if courses.isEmpty {
             Text("Add the courses you’re taking in \(store.selectedTerm?.name ?? "this term") to set up each syllabus.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -272,6 +285,7 @@ struct ThisTermSection: View {
                     .frame(minHeight: 44)
             }
             .padding(.horizontal, AgoraSpacing.lg)
+            .padding(.vertical, AgoraSpacing.md)
             .glassSurface(cornerRadius: AgoraRadius.inset + 2)
         }
     }

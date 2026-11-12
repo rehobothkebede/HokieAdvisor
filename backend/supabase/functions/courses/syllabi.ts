@@ -2,6 +2,7 @@
 
 import type { Deps } from "./handler.ts";
 import { localDate, stringField } from "./handler.ts";
+import { quotaDenial } from "../_shared/quota.ts";
 import { type PageText, verifyExtraction } from "./extraction.ts";
 import { documentChanges, reminderIdsForDocuments } from "./review.ts";
 import { type CourseRow, type DocumentRow, HandlerError, type TermRow } from "./types.ts";
@@ -121,6 +122,13 @@ export async function uploadSyllabus(body: Record<string, unknown>, deps: Deps) 
   if (duplicate && duplicate.processing_state !== "failed") {
     return { duplicate: true, document: documentDTO(duplicate) };
   }
+
+  // A paid extraction will run: reserve it before storing anything, so a
+  // denied upload leaves no file or row behind. Exact duplicates returned
+  // above make no AI call and cost nothing; re-uploading a file whose earlier
+  // attempt failed does run extraction again, so it counts.
+  const denial = quotaDenial(await deps.reserveExtraction(), "document", "SYLLABUS");
+  if (denial) throw new HandlerError(denial.status, denial.code, denial.message);
   if (duplicate) {
     // Retrying a failed upload of the same file: replace the failed attempt.
     await deps.store.removeFiles([duplicate.storage_path]);

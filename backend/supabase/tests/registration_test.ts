@@ -4,6 +4,7 @@
 
 import { assert, assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { asAnon, asUser, createTestDatabase, createUser } from "./harness.ts";
+import { allowExtraction } from "./quota_fixtures.ts";
 import { PgliteStore } from "./store_pglite.ts";
 import { currentTerm, handleAction, localDate } from "../functions/courses/handler.ts";
 
@@ -13,7 +14,13 @@ const student = await createUser(db, "student@vt.edu");
 const noExtractor = () => Promise.resolve({ ok: false as const, code: "UNUSED" });
 
 function deps(nowISO: string, userId = student) {
-  return { store: new PgliteStore(db, userId), now: () => new Date(nowISO), userId, extractor: noExtractor };
+  return {
+    store: new PgliteStore(db, userId),
+    now: () => new Date(nowISO),
+    userId,
+    extractor: noExtractor,
+    reserveExtraction: allowExtraction,
+  };
 }
 
 Deno.test("every seeded deadline cites a published official source", async () => {

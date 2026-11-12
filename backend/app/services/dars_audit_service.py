@@ -11,7 +11,8 @@ from app.services.ai_service import _call_with_retry
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# max_retries=0: each paid call is reserved once; the SDK must not repeat it.
+client = OpenAI(api_key=OPENAI_API_KEY, max_retries=0)
 
 
 _DARS_EXTRACT_PROMPT = """You are parsing an official Virginia Tech uAchieve/DARS degree audit report.
@@ -82,13 +83,17 @@ COURSE HISTORY:
 Keep every string short and preserve official DARS wording where possible."""
 
 
-def parse_dars_audit(file_bytes: bytes, content_type: str) -> dict:
+def parse_dars_audit(file_bytes: bytes, content_type: str, before_paid_call=None) -> dict:
     if content_type == "application/pdf":
         text = _pdf_to_text(file_bytes)
         if not text.strip():
             raise ValueError("Could not extract text from DARS PDF. Try uploading a screenshot or image export.")
+        if before_paid_call:
+            before_paid_call()  # reserves the one paid call; raises if denied
         result = _extract_from_text(text)
     elif content_type in ("image/png", "image/jpeg", "image/jpg"):
+        if before_paid_call:
+            before_paid_call()
         result = _extract_from_image(file_bytes, content_type)
     else:
         raise ValueError(f"Unsupported file type: {content_type}. Upload a PDF, PNG, or JPG.")
@@ -146,11 +151,15 @@ def _pdf_to_text(file_bytes: bytes) -> str:
         raise RuntimeError("pdfplumber is not installed. Run: pip install pdfplumber") from e
 
     text_parts: list[str] = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text_parts.append(page_text)
+    try:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+    except Exception:
+        # A corrupt or non-PDF file: a clear 422, decided before any paid call.
+        raise ValueError("We couldn't open this PDF. Upload a readable DARS PDF, PNG, or JPG.") from None
     return "\n".join(text_parts)
 
 

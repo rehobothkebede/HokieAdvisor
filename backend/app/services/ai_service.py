@@ -10,7 +10,8 @@ from app.config import OPENAI_API_KEY, OPENAI_MODEL, OPENAI_MODEL_CHAT, OPENAI_M
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# max_retries=0: each paid call is reserved once; the SDK must not repeat it.
+client = OpenAI(api_key=OPENAI_API_KEY, max_retries=0)
 
 # ---------------------------------------------------------------------------
 # Load CS degree requirements once at startup so every chat has full context
@@ -288,8 +289,10 @@ def _build_system_prompt(course_context: str = "", student_context: str = "") ->
     return "\n\n".join(parts)
 
 
-def _call_with_retry(fn, retries: int = 3, backoff: float = 1.5):
-    """Call fn(), retrying on transient OpenAI errors with exponential backoff."""
+def _call_with_retry(fn, retries: int = 1, backoff: float = 1.5):
+    """Call fn() once by default. Each paid call is reserved exactly once
+    (ai_guard.reserve), so automatic retries would spend past the allowance;
+    a caller that wants another attempt must reserve again."""
     last_error = None
     for attempt in range(retries):
         try:

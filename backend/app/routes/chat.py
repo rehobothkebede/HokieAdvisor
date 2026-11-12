@@ -1,17 +1,23 @@
+import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.routes.errors import error_detail
+from app.services import ai_guard
+from app.services.ai_guard import VerifiedUser, require_user
 from app.services.ai_service import chat_with_advisor, chat_stream_with_advisor
 from app.services.coe_service import get_coe_context_for_major, resolve_full_major_name
 
-router = APIRouter(prefix="/chat", tags=["Advisor Chat"])
+# Retired for the pilot: see ai_guard.retired_for_pilot.
+router = APIRouter(prefix="/chat", tags=["Advisor Chat"], dependencies=[Depends(ai_guard.retired_for_pilot)])
 
 # Mirrors the chat Edge Function's input caps.
 MAX_MESSAGES = 40
 MAX_MESSAGE_CHARS = 8000
 ALLOWED_ROLES = {"user", "assistant"}
+_AI_FAILED = "We could not reach MyAdvisor right now. Please try again."
+logger = logging.getLogger(__name__)
 
 
 class Message(BaseModel):
@@ -42,7 +48,7 @@ class ChatResponse(BaseModel):
 
 
 @router.post("", response_model=ChatResponse)
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, user: VerifiedUser = Depends(require_user)):
     """
     Send a conversation to the Hokie Advisor AI (tutor / advisor).
     Pass the full message history so the bot retains context across turns.
@@ -65,6 +71,7 @@ def chat(request: ChatRequest):
         course_context = f"Student's major: {full_name}\n\n" + get_coe_context_for_major(request.major)
 
     transcript = [e.model_dump() for e in request.transcript]
+    ai_guard.reserve(user, "chat")  # last step before the single paid call
     try:
         reply, truncated = chat_with_advisor(
             messages,
@@ -74,8 +81,9 @@ def chat(request: ChatRequest):
             transcript_notes=request.transcript_notes,
             chat_memories=request.chat_memories,
         )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=error_detail("CHAT_AI_REQUEST_FAILED", f"AI service error: {str(e)}"))
+    except Exception:
+        logger.warning("Legacy chat AI request failed")
+        raise HTTPException(status_code=502, detail=error_detail("CHAT_AI_REQUEST_FAILED", _AI_FAILED)) from None
 
     return ChatResponse(reply=reply, truncated=truncated)
 
@@ -102,7 +110,7 @@ def _sanitize_messages(messages: list[Message]) -> list[dict[str, str]]:
 
 
 @router.post("/stream")
-def chat_stream(request: ChatRequest):
+def chat_stream(request: ChatRequest, user: VerifiedUser = Depends(require_user)):
     """Stream the AI advisor response token by token via Server-Sent Events."""
     messages = _sanitize_messages(request.messages)
     course_context = ""
@@ -111,6 +119,7 @@ def chat_stream(request: ChatRequest):
         course_context = f"Student's major: {full_name}\n\n" + get_coe_context_for_major(request.major)
 
     transcript = [e.model_dump() for e in request.transcript]
+    ai_guard.reserve(user, "chat")
     try:
         generator = chat_stream_with_advisor(
             messages,
@@ -120,8 +129,9 @@ def chat_stream(request: ChatRequest):
             transcript_notes=request.transcript_notes,
             chat_memories=request.chat_memories,
         )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=error_detail("CHAT_AI_REQUEST_FAILED", f"AI service error: {str(e)}"))
+    except Exception:
+        logger.warning("Legacy chat stream AI request failed")
+        raise HTTPException(status_code=502, detail=error_detail("CHAT_AI_REQUEST_FAILED", _AI_FAILED)) from None
 
     return StreamingResponse(
         generator,

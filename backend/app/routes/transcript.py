@@ -1,9 +1,13 @@
 import asyncio
 from typing import List, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+import logging
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, ValidationError
 from app.routes.errors import error_detail
+from app.services import ai_guard
+from app.services.ai_guard import VerifiedUser, require_user
 from app.services.transcript_service import TranscriptParseError, parse_transcript
 
 router = APIRouter(prefix="/transcript", tags=["Transcript"])
@@ -43,7 +47,7 @@ class TranscriptResponse(BaseModel):
 
 
 @router.post("/upload", response_model=TranscriptResponse)
-async def upload_transcript(file: UploadFile = File(...)):
+async def upload_transcript(file: UploadFile = File(...), user: VerifiedUser = Depends(require_user)):
     """
     Upload a transcript (PDF, PNG, or JPG) and extract the list of completed courses.
     """
@@ -70,13 +74,21 @@ async def upload_transcript(file: UploadFile = File(...)):
         )
 
     try:
-        result = await asyncio.to_thread(parse_transcript, file_bytes, content_type)
+        result = await asyncio.to_thread(
+            parse_transcript, file_bytes, content_type, lambda: ai_guard.reserve(user, "document")
+        )
+    except HTTPException:
+        raise
     except TranscriptParseError as e:
         raise HTTPException(status_code=e.status_code, detail=error_detail(e.code, e.message))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=error_detail("TRANSCRIPT_PARSE_FAILED", str(e)))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=error_detail("TRANSCRIPT_AI_REQUEST_FAILED", str(e)))
+    except RuntimeError:
+        logging.getLogger(__name__).warning("Legacy transcript AI request failed")
+        raise HTTPException(
+            status_code=502,
+            detail=error_detail("TRANSCRIPT_AI_REQUEST_FAILED", "We could not read your transcript right now. Please try again."),
+        ) from None
 
     try:
         return TranscriptResponse(

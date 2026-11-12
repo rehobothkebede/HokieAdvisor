@@ -1,0 +1,39 @@
+QA logs: /tmp/agora-client-qa.HWG2d7
+PASS overview decodes published terms
+PASS registration includes official evidence
+PASS add course encodes section and term
+PASS syllabus reminder persists
+PASS explicit null clears reminder
+PASS multipart PDF upload reaches review
+PASS original PDF round trips without corruption
+PASS syllabus facts and evidence decode
+PASS review activates course dashboard
+PASS confirmed exam date reaches iOS
+PASS relative dates stay undated
+PASS reminder timestamp decodes
+PASS deleted reminder disappears
+PASS course deletion refreshes list
+PASS normal stream completes
+PASS memory event reaches store
+PASS normal releases composer
+PASS token limit exposes Continue
+PASS length releases composer
+PASS silent stream disconnect retains interrupted answer
+PASS abrupt releases composer
+PASS provider interruption retains partial answer
+PASS server-interrupted releases composer
+PASS empty stream restores draft
+PASS empty releases composer
+[APIService] response 429 http://127.0.0.1:8792/functions/v1/chat/stream body={"detail":{"code":"CHAT_RATE_LIMITED","message":"Daily test limit reached."}}
+PASS 429 restores draft with friendly message
+PASS rate-limit releases composer
+PASS graph preserves hyphenated node names
+PASS graph retains direction and weight
+PASS graph includes traversal steps
+PASS tree uses layered layout
+PASS invalid graph falls back to raw text
+PASS graph coordinates fit card
+PASS inline math preserves surrounding words and spaces
+PASS display math parses
+PASS prices are not treated as equations
+RESULT: 36/36 checks passed

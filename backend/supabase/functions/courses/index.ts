@@ -6,6 +6,7 @@
 
 import { openAIModel } from "../_shared/academic.ts";
 import { requireUser } from "../_shared/auth.ts";
+import { reserveQuota } from "../_shared/quota.ts";
 import { type Extractor, openAIExtractor } from "./extraction.ts";
 import { handleHTTP } from "./http.ts";
 import { RestStore } from "./store_rest.ts";
@@ -34,6 +35,9 @@ Deno.serve((req) =>
       now: () => new Date(),
       userId,
       extractor,
+      // Without a provider key nothing paid can run, so deny before reserving.
+      reserveExtraction: () =>
+        openAIKey ? reserveQuota(userId, "document") : Promise.resolve({ status: "unavailable", cause: "no_provider_key" }),
     }),
   })
 );

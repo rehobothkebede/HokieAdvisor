@@ -16,7 +16,8 @@ import { errorResponse } from "../functions/_shared/academic.ts";
 import type { Extractor } from "../functions/courses/extraction.ts";
 import { handleHTTP } from "../functions/courses/http.ts";
 import { QA_RECORDINGS } from "./fixtures/qa_syllabi.ts";
-import { createTestDatabase, createUser } from "./harness.ts";
+import { reserveQuota } from "../functions/_shared/quota.ts";
+import { createTestDatabase, createUser, quotaRPCFetch } from "./harness.ts";
 import { PgliteStore } from "./store_pglite.ts";
 
 // No model calls locally: synthetic QA syllabi carry a fixture ID, and the
@@ -49,6 +50,12 @@ Deno.serve({ hostname: "127.0.0.1", port }, (req) => {
       now: () => (pinnedNow ? new Date(pinnedNow) : new Date()),
       userId,
       extractor: recordedExtractor,
+      // The real reserve_ai_quota from migration 010, with pilot defaults.
+      reserveExtraction: () =>
+        reserveQuota(userId, "document", {
+          env: (name) => ({ SUPABASE_URL: "http://qa.local", SUPABASE_SERVICE_ROLE_KEY: "qa-only" } as Record<string, string>)[name] ?? Deno.env.get(name),
+          fetch: quotaRPCFetch(db),
+        }),
     }),
   });
 });

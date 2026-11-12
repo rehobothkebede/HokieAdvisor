@@ -8,6 +8,7 @@ import { zonedTimeToUTC } from "../functions/courses/review.ts";
 import { QA_RECORDINGS, QA_V1_EXTRACTION, QA_V1_PAGES, QA_V2_PAGES } from "./fixtures/qa_syllabi.ts";
 import { buildPDF } from "./fixtures/make_qa_pdfs.ts";
 import { asUser, createTestDatabase, createUser } from "./harness.ts";
+import { allowExtraction } from "./quota_fixtures.ts";
 import { fileBytes, PgliteStore } from "./store_pglite.ts";
 
 const db = await createTestDatabase();
@@ -19,7 +20,7 @@ const recorded: Extractor = (pages) => {
 };
 
 function deps(userId: string, extractor: Extractor = recorded): Deps {
-  return { store: new PgliteStore(db, userId), now: () => NOW, userId, extractor };
+  return { store: new PgliteStore(db, userId), now: () => NOW, userId, extractor, reserveExtraction: allowExtraction };
 }
 
 async function call(userId: string, action: string, body: Record<string, unknown> = {}, extractor?: Extractor) {

@@ -1,0 +1,7 @@
+Check backend/supabase/functions/chat/index.ts
+Check backend/supabase/functions/tutoring/index.ts
+Check backend/supabase/functions/audit/index.ts
+Check backend/supabase/functions/transcript/index.ts
+Check backend/supabase/functions/dars/index.ts
+Check backend/supabase/functions/account/index.ts
+Check backend/supabase/functions/courses/index.ts

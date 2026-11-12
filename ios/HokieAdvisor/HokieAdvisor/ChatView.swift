@@ -18,11 +18,6 @@ struct ChatView: View {
     private let keyboardMessageBottomPadding: CGFloat = 152
     @State private var showHistory = false
     @State private var showTranscriptImport = false
-    @State private var showAttachmentMenu = false
-    @State private var showCameraPicker = false
-    @State private var showFileImporter = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var selectedAttachment: ChatAttachment?
     @State private var isKeyboardVisible = false
     @State private var scrollOffset: CGFloat = 0
     @FocusState private var isInputFocused: Bool
@@ -32,7 +27,7 @@ struct ChatView: View {
     }
 
     private var hasSendableDraft: Bool {
-        hasDraft || selectedAttachment != nil
+        hasDraft
     }
 
     private var draftMessageText: String {
@@ -40,7 +35,7 @@ struct ChatView: View {
     }
 
     private var canSubmitDraft: Bool {
-        vm.canSend(text: draftMessageText, attachment: selectedAttachment?.payload)
+        vm.canSend(text: draftMessageText)
     }
 
     private var draftOverflow: Int {
@@ -123,35 +118,17 @@ struct ChatView: View {
         .sheet(isPresented: $showTranscriptImport) {
             TranscriptView().environmentObject(appState)
         }
-        .sheet(isPresented: $showCameraPicker) {
-            CameraCaptureView { image in
-                attach(kind: .camera) {
-                    try ChatAttachmentProcessor.prepareImage(image, name: "Camera photo")
-                }
-            }
-            .ignoresSafeArea()
-        }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false,
-            onCompletion: handlePickedFile
-        )
-        .onChange(of: selectedPhotoItem) { _, item in
-            guard let item else { return }
-            Task { await handlePickedPhoto(item) }
-        }
     }
 
     // MARK: - Header
 
     private var header: some View {
         HokiePageHeader(
-            title: "Advisor",
+            title: "MyAdvisor",
             eyebrow: "",
             subtitle: dynamicTypeSize.isAccessibilitySize
-                ? "Advising and study help."
-                : "Academic advising for your degree, with study help when you need it.",
+                ? "Your degree. Your next steps."
+                : "Plan your degree, understand requirements, and find the right support.",
             symbol: "bubble.left.and.bubble.right.fill",
             accent: theme.accent,
         ) {
@@ -177,7 +154,7 @@ struct ChatView: View {
     }
 
     private var compactTitleOverlay: some View {
-        HokieCompactTitleBar(title: "Advisor", progress: compactTitleProgress)
+        HokieCompactTitleBar(title: "MyAdvisor", progress: compactTitleProgress)
     }
 
     // MARK: - Message List
@@ -285,6 +262,7 @@ struct ChatView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: AgoraSpacing.xl) {
+            if let error = vm.errorMessage { ErrorBanner(message: error) }
             contextCard
 
             if appState.needsTutoringSupport {
@@ -295,7 +273,7 @@ struct ChatView: View {
             }
 
             suggestionGroup("Plan your degree", icon: "checklist.checked", suggestions: planningSuggestions)
-            suggestionGroup("Study help", icon: "book.fill", suggestions: studySuggestions)
+            suggestionGroup("Manage your semester", icon: "calendar", suggestions: semesterSuggestions)
         }
         .padding(.top, AgoraSpacing.sm)
     }
@@ -303,6 +281,13 @@ struct ChatView: View {
     /// States only what the app actually sends with each question.
     private var contextCard: some View {
         VStack(alignment: .leading, spacing: AgoraSpacing.sm) {
+            Text("Pilot · up to 10 AI replies a day")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.accentText)
+            Text("MyAdvisor helps with academic planning and finding support. Assignment solutions and general tutoring aren’t included in this pilot.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if appState.hasTranscript {
                 Label {
                     Text(contextLine)
@@ -352,10 +337,10 @@ struct ChatView: View {
         ]
     }
 
-    private var studySuggestions: [Suggestion] {
+    private var semesterSuggestions: [Suggestion] {
         [
-            Suggestion(title: "Help me understand a course topic…", icon: "lightbulb", prompt: nil),
-            Suggestion(title: "Show me BFS on a graph with a visual", icon: "point.3.connected.trianglepath.dotted", prompt: "Show me BFS on a graph with a visual"),
+            Suggestion(title: "Help me plan my study week.", icon: "calendar", prompt: "Help me plan my study week around my current courses."),
+            Suggestion(title: "Where can I get help with a difficult class?", icon: "lifepreserver", prompt: "Where can I find tutoring or office hours for a difficult class?"),
         ]
     }
 
@@ -402,38 +387,16 @@ struct ChatView: View {
 
     private var inputBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let attachment = selectedAttachment {
-                ChatAttachmentChip(attachment: attachment) {
-                    withAnimation(controlAnimation) {
-                        selectedAttachment = nil
-                    }
-                }
-                .padding(.leading, 66)
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity)
-                    )
-                )
-            }
-
             if draftOverflow > 0 {
                 Text("Message is \(draftOverflow.formatted()) characters over the \(ChatViewModel.maxMessageCharacters.formatted())-character limit.")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.red)
-                    .padding(.leading, 66)
+                    .padding(.leading, 20)
                     .transition(.opacity)
             }
 
             ZStack(alignment: .bottomLeading) {
                 HStack(alignment: .bottom, spacing: 10) {
-                    ChatComposerCircleButton(systemName: "plus", isActive: showAttachmentMenu) {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        withAnimation(controlAnimation) {
-                            showAttachmentMenu.toggle()
-                        }
-                    }
-
                     HStack(alignment: .bottom, spacing: 8) {
                         TextField("Ask about your degree or a course", text: $vm.inputText, axis: .vertical)
                             .focused($isInputFocused)
@@ -464,19 +427,6 @@ struct ChatView: View {
                                 .id("send")
                                 .transition(.scale(scale: 0.82).combined(with: .opacity))
                                 .accessibilityLabel("Send message")
-                            } else {
-                                Button {
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                } label: {
-                                    Image(systemName: "mic")
-                                        .font(.system(size: 21, weight: .semibold))
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 38, height: 38)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Voice transcription placeholder")
-                                .id("mic")
-                                .transition(.scale(scale: 0.88).combined(with: .opacity))
                             }
                         }
                         .padding(.trailing, 5)
@@ -486,31 +436,7 @@ struct ChatView: View {
                     .animation(controlAnimation, value: hasSendableDraft)
                 }
 
-                if showAttachmentMenu {
-                    ChatAttachmentMenu(
-                        cameraAvailable: UIImagePickerController.isSourceTypeAvailable(.camera),
-                        onCamera: {
-                            showAttachmentMenu = false
-                            showCameraPicker = true
-                        },
-                        onFiles: {
-                            showAttachmentMenu = false
-                            showFileImporter = true
-                        },
-                        selectedPhotoItem: $selectedPhotoItem
-                    )
-                    .offset(x: 0, y: -64)
-                    .transition(
-                        .asymmetric(
-                            insertion: .scale(scale: 0.92, anchor: .bottomLeading)
-                                .combined(with: .opacity)
-                                .combined(with: .move(edge: .bottom)),
-                            removal: .scale(scale: 0.96, anchor: .bottomLeading)
-                                .combined(with: .opacity)
-                        )
-                    )
-                    .zIndex(1)
-                }
+
             }
         }
         .padding(.horizontal, 16)
@@ -520,71 +446,18 @@ struct ChatView: View {
         .shadow(color: Color.black.opacity(isKeyboardVisible ? 0.08 : 0.04), radius: isKeyboardVisible ? 18 : 10, x: 0, y: 8)
         .background(.clear)
         .animation(keyboardAnimation, value: isKeyboardVisible)
-        .animation(controlAnimation, value: selectedAttachment?.id)
-        .animation(controlAnimation, value: showAttachmentMenu)
     }
 
     private func sendDraft() {
-        let textToSend = draftMessageText
-        guard vm.canSend(text: textToSend, attachment: selectedAttachment?.payload) else { return }
-        let attachmentToRestore = selectedAttachment
-        let typedTextToRestore = vm.inputText
-
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        guard canSubmitDraft else { return }
+        let text = draftMessageText
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         UIApplication.shared.dismissKeyboard()
-        showAttachmentMenu = false
-        selectedAttachment = nil
-
         Task { @MainActor in
-            let sent = await vm.sendMessage(textOverride: textToSend, attachment: attachmentToRestore?.payload)
-            if !sent {
-                selectedAttachment = attachmentToRestore
-                vm.inputText = typedTextToRestore
-            }
+            await vm.sendMessage(textOverride: text)
         }
     }
 
-    private func handlePickedPhoto(_ item: PhotosPickerItem) async {
-        selectedPhotoItem = nil
-        showAttachmentMenu = false
-        guard let data = try? await item.loadTransferable(type: Data.self) else {
-            vm.errorMessage = "Could not load the selected photo."
-            return
-        }
-        attach(kind: .photo) {
-            try ChatAttachmentProcessor.prepareImageData(data, name: "Photo")
-        }
-    }
-
-    private func handlePickedFile(_ pickerResult: Result<[URL], Error>) {
-        showAttachmentMenu = false
-        switch pickerResult {
-        case .failure:
-            vm.errorMessage = "Could not open the selected file."
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            attach(kind: .file) {
-                let accessing = url.startAccessingSecurityScopedResource()
-                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-                return try ChatAttachmentProcessor.prepareFile(at: url)
-            }
-        }
-    }
-
-    /// Prepares an attachment off the main thread (downscaling, PDF text
-    /// extraction) and shows any size or type problem right away.
-    private func attach(kind: ChatAttachment.Kind, _ prepare: @escaping @Sendable () throws -> ChatAttachmentProcessor.Prepared) {
-        vm.errorMessage = nil
-        Task {
-            do {
-                let prepared = try await Task.detached(priority: .userInitiated) { try prepare() }.value
-                selectedAttachment = ChatAttachment(kind: kind, prepared: prepared)
-            } catch {
-                selectedAttachment = nil
-                vm.errorMessage = error.localizedDescription
-            }
-        }
-    }
 }
 
 #if DEBUG

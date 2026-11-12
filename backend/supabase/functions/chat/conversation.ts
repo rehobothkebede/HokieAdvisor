@@ -3,92 +3,57 @@ export type ChatMessage = {
   content: string;
 };
 
-export const FULL_HISTORY_MESSAGES = 12;
-const EARLIER_TURN_CHARS = 200;
-const EARLIER_DIGEST_CHARS = 2000;
+// Only the newest turns are sent to the model; older ones are dropped, not
+// summarized, so prompt size can't grow with the conversation. Saved
+// conversations on the device are untouched; this only limits what is sent.
+export const RECENT_WINDOW_MESSAGES = 6;
+/** Older turns in the window are shortened to this many characters. */
+export const PRIOR_TURN_CHARS = 1500;
 
-// Keeps the last FULL_HISTORY_MESSAGES turns verbatim and folds the student's
-// earlier questions into a short digest, so prompt size stops growing with the
-// conversation. Earlier assistant answers are dropped; the digest is enough to
-// keep the thread's topic without paying for old long answers again.
-export function trimHistory(messages: ChatMessage[]): { recent: ChatMessage[]; earlierDigest: string } {
-  if (messages.length <= FULL_HISTORY_MESSAGES) {
-    return { recent: messages, earlierDigest: "" };
-  }
-
-  const earlier = messages.slice(0, -FULL_HISTORY_MESSAGES);
-  const recent = messages.slice(-FULL_HISTORY_MESSAGES);
-  const lines: string[] = [];
-  let used = 0;
-  for (const message of earlier) {
-    if (message.role !== "user") continue;
-    const text = message.content.replace(/\s+/g, " ").trim();
-    const line = `- ${text.length > EARLIER_TURN_CHARS ? `${text.slice(0, EARLIER_TURN_CHARS)}…` : text}`;
-    if (used + line.length > EARLIER_DIGEST_CHARS) break;
-    lines.push(line);
-    used += line.length;
-  }
-
-  return {
-    recent,
-    earlierDigest: lines.length
-      ? `Earlier in this conversation (older turns summarized), the student asked:\n${lines.join("\n")}`
-      : "",
-  };
+export function recentWindow(messages: ChatMessage[]): ChatMessage[] {
+  const recent = messages.slice(-RECENT_WINDOW_MESSAGES);
+  // The model must see a conversation that starts with the student.
+  while (recent.length > 1 && recent[0].role !== "user") recent.shift();
+  return recent.map((message, index) =>
+    index === recent.length - 1 || message.content.length <= PRIOR_TURN_CHARS
+      ? message
+      : { ...message, content: `${message.content.slice(0, PRIOR_TURN_CHARS)}…` }
+  );
 }
 
-const TUTOR_KEYWORDS = new RegExp(
-  "\\b(" + [
-    "proofs?",
-    "prove",
-    "induction",
-    "lemma",
-    "theorem",
-    "matri(x|ces)",
-    "eigen\\w*",
-    "determinant",
-    "vector",
-    "integral",
-    "derivative",
-    "recurrence",
-    "big[- ]?o",
-    "complexity",
-    "algorithms?",
-    "bfs",
-    "dfs",
-    "dijkstra",
-    "graph",
-    "tree",
-    "heap",
-    "hash",
-    "recursion",
-    "pointer",
-    "debug\\w*",
-    "compile\\w*",
-    "segfault",
-    "equation",
-    "homework",
-    "problem set",
-  ].join("|") + ")\\b",
-  "i",
-);
+type Env = (name: string) => string | undefined;
+const denoEnv: Env = (name) => Deno.env.get(name);
 
-// Coursework help (math, proofs, algorithms, code, or anything with an
-// attachment) goes to the tutor model; planning and advising stay on the chat
-// model. Both fall back to OPENAI_MODEL, then the default.
-export function isTutorRequest(latestMessage: string, hasAttachment = false): boolean {
-  if (hasAttachment) return true;
-  if (/\$[^$\s][^$]*\$|\\\(|\\\[|\\begin\{|```/.test(latestMessage)) return true;
-  return TUTOR_KEYWORDS.test(latestMessage);
+/** The one advisor model. Clients can't choose it; older tutor settings are ignored. */
+export function advisorModel(env: Env = denoEnv): string {
+  return env("OPENAI_MODEL_ADVISOR") || env("OPENAI_MODEL_CHAT") || env("OPENAI_MODEL") || "gpt-5.4-nano";
 }
 
-export function chatModel(): string {
-  return Deno.env.get("OPENAI_MODEL_CHAT") || Deno.env.get("OPENAI_MODEL") || "gpt-5.4-nano";
+// Reasoning models spend part of max_completion_tokens on hidden reasoning
+// before any visible text. 1,200 leaves room for low-effort reasoning plus a
+// concise ~250-400 word answer. Bounded so a setting can't raise it far.
+export const DEFAULT_MAX_COMPLETION_TOKENS = 1200;
+const MIN_COMPLETION_TOKENS = 400;
+const MAX_COMPLETION_TOKENS_CAP = 2000;
+
+export function maxCompletionTokens(env: Env = denoEnv): number | null {
+  const raw = env("CHAT_MAX_COMPLETION_TOKENS")?.trim();
+  if (!raw) return DEFAULT_MAX_COMPLETION_TOKENS;
+  if (!/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return value >= MIN_COMPLETION_TOKENS && value <= MAX_COMPLETION_TOKENS_CAP ? value : null;
 }
 
-export function chooseModel(latestMessage: string, hasAttachment = false): { model: string; kind: "chat" | "tutor" } {
-  if (isTutorRequest(latestMessage, hasAttachment)) {
-    return { model: Deno.env.get("OPENAI_MODEL_TUTOR") || chatModel(), kind: "tutor" };
-  }
-  return { model: chatModel(), kind: "chat" };
+const EFFORTS = new Set(["none", "minimal", "low", "medium"]);
+
+/**
+ * reasoning_effort sent to the provider. Defaults to "low" so most of the
+ * budget goes to the answer. CHAT_REASONING_EFFORT=off omits the parameter
+ * for a model that doesn't accept it. Invalid values are a config error.
+ */
+export function reasoningEffort(env: Env = denoEnv): string | undefined | null {
+  const raw = env("CHAT_REASONING_EFFORT")?.trim().toLowerCase();
+  if (!raw) return "low";
+  if (raw === "off") return undefined;
+  return EFFORTS.has(raw) ? raw : null;
 }

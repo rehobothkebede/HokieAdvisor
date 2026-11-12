@@ -18,6 +18,7 @@ export const MIGRATIONS = [
   "007_course_companion_registration.sql",
   "008_course_companion_syllabi.sql",
   "009_course_companion_review.sql",
+  "010_ai_usage_quotas.sql",
 ];
 
 export async function createTestDatabase(upTo?: string): Promise<PGlite> {
@@ -73,3 +74,32 @@ export async function asAnon<T>(db: PGlite, fn: (tx: Tx) => Promise<T>): Promise
 }
 
 export type Tx = Parameters<Parameters<PGlite["transaction"]>[0]>[0];
+
+/**
+ * Calls the real reserve_ai_quota (migration 010) as service_role and returns
+ * the rows PostgREST would return for POST /rest/v1/rpc/reserve_ai_quota.
+ */
+export async function reserveAsServiceRole(db: PGlite, args: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  return await db.transaction(async (tx) => {
+    await tx.exec("set local role service_role");
+    const result = await tx.query<Record<string, unknown>>(
+      "select * from public.reserve_ai_quota($1, $2, $3, $4, $5, $6)",
+      [args.p_user_id, args.p_kind, args.p_user_daily_limit, args.p_global_daily_limit, args.p_burst_limit, args.p_burst_window_seconds],
+    );
+    return result.rows;
+  });
+}
+
+/** A fetch that serves reserve_ai_quota from PGlite, like hosted PostgREST. */
+export function quotaRPCFetch(db: PGlite): typeof fetch {
+  return async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!url.endsWith("/rest/v1/rpc/reserve_ai_quota")) return new Response("not found", { status: 404 });
+    try {
+      const rows = await reserveAsServiceRole(db, JSON.parse(String(init?.body)));
+      return Response.json(rows);
+    } catch {
+      return Response.json({ message: "rpc failed" }, { status: 400 });
+    }
+  };
+}

@@ -1,8 +1,10 @@
+import hmac
 import json
 import logging
 import os
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from app.config import COE_DIR
@@ -16,7 +18,19 @@ from app.services.supabase_service import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def require_admin(x_admin_token: Optional[str] = Header(default=None)) -> None:
+    """Admin routes write shared data with the service role. They are off
+    unless ADMIN_API_TOKEN is set server-side, and then need that exact token."""
+    expected = os.getenv("ADMIN_API_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail=error_detail("ADMIN_DISABLED", "Admin endpoints are disabled."))
+    if not x_admin_token or not hmac.compare_digest(x_admin_token.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail=error_detail("ADMIN_UNAUTHORIZED", "Admin token required."))
+
+
+router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_admin)])
 
 
 class SeedCoeRequest(BaseModel):
@@ -105,9 +119,9 @@ def supabase_status():
     except SupabaseNotConfigured:
         return {**status, "status": "not_configured"}
     except SupabaseServiceError as exc:
-        return {**status, "status": "unreachable", "detail": str(exc)}
+        return {**status, "status": "unreachable", "detail": type(exc).__name__}
     except Exception as exc:
         logger.exception("Supabase health check failed")
-        return {**status, "status": "unreachable", "detail": str(exc)}
+        return {**status, "status": "unreachable", "detail": type(exc).__name__}
 
     return {**status, **health}

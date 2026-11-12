@@ -1,3 +1,5 @@
+import { quotaRejection, reserveQuota } from "./quota.ts";
+
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -12,6 +14,8 @@ export type UploadedFile = {
 };
 
 type OpenAIJsonInput = {
+  /** The verified student; one "document" allowance is reserved for them. */
+  userId: string;
   prompt: string;
   fileName: string;
   mimeType: string;
@@ -97,10 +101,15 @@ export async function extractJsonFromOpenAI(input: OpenAIJsonInput): Promise<Rec
   if (!openAIKey) {
     return errorResponse(
       `${input.errorCodePrefix}_AI_NOT_CONFIGURED`,
-      "We could not analyze your file right now. Check your connection and try again.",
+      "Document reading is temporarily unavailable. Please try again a little later.",
       503,
     );
   }
+
+  // One reservation per paid extraction, taken last before the single call
+  // (no automatic retries).
+  const rejection = quotaRejection(await reserveQuota(input.userId, "document"), "document", input.errorCodePrefix);
+  if (rejection) return rejection;
 
   const content = fileContent(input);
   const body = {

@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-enum APIError: LocalizedError {
+nonisolated enum APIError: LocalizedError {
     case invalidURL
     case networkError(Error)
     case serverError(Int)
@@ -30,7 +30,7 @@ enum APIError: LocalizedError {
             return "We could not complete that request right now. Check your connection and try again."
         case .serverMessage(let statusCode, _, let message):
             // Session and quota messages are written for students; the status code adds nothing.
-            if statusCode == 401 || statusCode == 429 { return message }
+            if statusCode == 401 || statusCode == 429 || statusCode == 503 { return message }
             return "\(message) (HTTP \(statusCode))"
         case .decodingError:       return "Could not read server response."
         }
@@ -71,11 +71,11 @@ enum APIError: LocalizedError {
     }
 }
 
-private struct APIErrorBody: Decodable {
+private nonisolated struct APIErrorBody: Decodable {
     let detail: APIErrorDetail?
 }
 
-private enum APIErrorDetail: Decodable {
+private nonisolated enum APIErrorDetail: Decodable {
     case message(String)
     case coded(code: String?, message: String)
 
@@ -118,7 +118,7 @@ private enum APIErrorDetail: Decodable {
 }
 
 final class APIService {
-    static let functionBaseURL = "\(SupabaseConfig.url)/functions/v1"
+    nonisolated static let functionBaseURL = "\(SupabaseConfig.url)/functions/v1"
     static let chatFunctionURL = "\(functionBaseURL)/chat"
     static let auditFunctionURL = "\(functionBaseURL)/audit"
     static let darsFunctionURL = "\(functionBaseURL)/dars"
@@ -135,7 +135,7 @@ final class APIService {
 
     static func streamChat(request: ChatRequest) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 guard let url = URL(string: "\(chatFunctionURL)/stream") else {
                     continuation.finish(throwing: APIError.invalidURL)
                     return
@@ -162,19 +162,31 @@ final class APIService {
                         continuation.finish(throwing: error(from: data, statusCode: http.statusCode))
                         return
                     }
+                    var completed = false
                     for try await line in bytes.lines {
                         guard line.hasPrefix("data: ") else { continue }
                         let payload = String(line.dropFirst(6))
-                        if payload == "[DONE]" { break }
+                        if payload == "[DONE]" {
+                            completed = true
+                            break
+                        }
                         if let event = streamEvent(from: payload) {
+                            if case .finish(let reason) = event {
+                                if reason == "interrupted" { throw URLError(.networkConnectionLost) }
+                                completed = true
+                            }
                             continuation.yield(event)
                         }
                     }
+                    // A clean TCP close is not proof the answer finished. This
+                    // also rejects an unexpected 200 JSON/HTML error response.
+                    guard completed else { throw URLError(.networkConnectionLost) }
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: APIError.networkError(error))
                 }
             }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
 
@@ -327,7 +339,7 @@ final class APIService {
         do { return try JSONDecoder().decode(Response.self, from: data) } catch { throw APIError.decodingError(error) }
     }
 
-    static func error(from data: Data, statusCode: Int) -> APIError {
+    nonisolated static func error(from data: Data, statusCode: Int) -> APIError {
         if let body = try? JSONDecoder().decode(APIErrorBody.self, from: data),
            let detail = body.detail,
            !detail.message.isEmpty {

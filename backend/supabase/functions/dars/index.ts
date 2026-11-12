@@ -99,6 +99,7 @@ Deno.serve(async (req) => {
   if (upload instanceof Response) return upload;
 
   const extracted = await extractJsonFromOpenAI({
+    userId: auth.user.id,
     prompt: DARS_EXTRACT_PROMPT,
     fileName: upload.fileName,
     mimeType: upload.mimeType,

@@ -91,6 +91,14 @@ nonisolated enum CourseCompanionAPI {
         let response: URLResponse
         do { (data, response) = try await URLSession.shared.data(for: request) } catch { throw APIError.networkError(error) }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            // A missing deployment is a service problem, not the student's
+            // connection. Preserve normal 404s for missing course records.
+            if http.statusCode == 404,
+               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               body["code"] as? String == "NOT_FOUND" {
+                throw APIError.serverMessage(503, "COURSES_UNAVAILABLE",
+                    "Course details are temporarily unavailable. Your transcript and advisor are still available.")
+            }
             throw APIService.error(from: data, statusCode: http.statusCode)
         }
         do { return try decoder.decode(Response.self, from: data) } catch { throw APIError.decodingError(error) }

@@ -13,7 +13,8 @@ from app.services.ai_service import _call_with_retry
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# max_retries=0: each paid call is reserved once; the SDK must not repeat it.
+client = OpenAI(api_key=OPENAI_API_KEY, max_retries=0)
 
 
 class TranscriptParseError(Exception):
@@ -179,7 +180,7 @@ def _decode_model_json(content: str | None) -> dict:
     return decoded
 
 
-def parse_transcript(file_bytes: bytes, content_type: str) -> dict:
+def parse_transcript(file_bytes: bytes, content_type: str, before_paid_call=None) -> dict:
     """
     Parse a transcript from uploaded bytes.
     content_type: "application/pdf", "image/png", or "image/jpeg"
@@ -199,8 +200,12 @@ def parse_transcript(file_bytes: bytes, content_type: str) -> dict:
                 "TRANSCRIPT_PDF_NO_TEXT",
                 "Could not extract text from this PDF. If it is a scanned transcript, upload a PNG or JPG instead.",
             )
+        if before_paid_call:
+            before_paid_call()  # reserves the one paid call; raises if denied
         result = _extract_from_text(text)
     elif content_type in ("image/png", "image/jpeg", "image/jpg"):
+        if before_paid_call:
+            before_paid_call()
         result = _extract_from_image(file_bytes, content_type)
     else:
         raise TranscriptParseError(
@@ -224,11 +229,18 @@ def _pdf_to_text(file_bytes: bytes) -> str:
         raise RuntimeError("pdfplumber is not installed. Run: pip install pdfplumber") from e
 
     text_parts: list[str] = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text_parts.append(page_text)
+    try:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+    except Exception:
+        # A corrupt or non-PDF file: a clear 422, decided before any paid call.
+        raise TranscriptParseError(
+            "TRANSCRIPT_PDF_UNREADABLE",
+            "We couldn't open this PDF. Upload a readable transcript PDF, PNG, or JPG.",
+        ) from None
     return "\n".join(text_parts)
 
 

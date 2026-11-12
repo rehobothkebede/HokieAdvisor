@@ -2,6 +2,7 @@
 // (database, storage, model, clock) comes in through `deps`, so the same code
 // runs in the edge function, in tests, and in the local QA server.
 
+import type { QuotaDecision } from "../_shared/quota.ts";
 import type { Extractor } from "./extraction.ts";
 import * as review from "./review.ts";
 import * as syllabi from "./syllabi.ts";
@@ -19,6 +20,11 @@ export type Deps = {
   /** The signed-in student; used only to name their private storage folder. */
   userId: string;
   extractor: Extractor;
+  /**
+   * Reserves one paid document extraction for this student (migration 010).
+   * Called only when an extraction will actually run, never for duplicates.
+   */
+  reserveExtraction: () => Promise<QuotaDecision>;
 };
 
 const REGISTRATION_KINDS = new Set([

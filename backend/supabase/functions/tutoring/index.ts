@@ -52,9 +52,9 @@ Deno.serve(async (req) => {
         link: null,
       },
       {
-        name: "Hokie Advisor Chat",
-        type: "AI tutor",
-        description: "Ask the Advisor tab for a worked example, concept explanation, or study plan tied to your transcript.",
+        name: "MyAdvisor",
+        type: "Planning",
+        description: "Ask MyAdvisor to plan study time around your deadlines or find a course's office hours. For help with the material itself, use office hours or tutoring.",
         link: null,
       },
     ],

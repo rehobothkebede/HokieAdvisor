@@ -65,11 +65,11 @@ struct HelpView: View {
                 Entry(
                     question: "What can the advisor do?",
                     answer: """
-                    It answers questions about requirements, courses, and planning, and helps you study CS and math topics with formatted math, code, and step-through graph diagrams.
+                    MyAdvisor helps you understand degree requirements, plan courses and study time, and find academic support.
 
                     Each question includes your imported transcript courses, in-progress courses, program, and saved memories.
 
-                    You can attach a photo, a PDF with selectable text (up to 30 pages), or a text file. Photos are compressed before sending.
+                    During the pilot, each student has up to 10 AI requests per day, resetting at midnight Eastern. Requests that reach the AI count toward the limit, including retries. Short redirects that don't use AI don't count. A shared pilot limit can also temporarily pause AI replies.
                     """
                 ),
                 Entry(
@@ -79,7 +79,9 @@ struct HelpView: View {
 
                     Answers are AI-generated and can be wrong. Check them against your official audit and your academic advisor before making enrollment decisions.
 
-                    Scanned PDFs without selectable text can't be read; attach a photo of the page instead. Voice input isn't available.
+                    Assignment solutions, essay writing, code debugging, general tutoring, chat attachments, and voice input aren't included in this pilot. For assignment help, use your instructor, office hours, or campus tutoring.
+
+                    Import transcripts in Profile → Transcript, official audits in Degree Progress, and syllabi in This term → your course.
                     """
                 ),
                 Entry(
@@ -87,7 +89,7 @@ struct HelpView: View {
                     answer: """
                     Chats are saved automatically. Tap the history button on the Advisor screen to reopen or delete one.
 
-                    Attached files are sent with that one question and aren't saved in chat history; the chat keeps only the file name.
+                    Older conversations may include attachment names; those original files aren't saved in chat history. New chat attachments aren't available during the pilot.
                     """
                 ),
                 Entry(
@@ -95,7 +97,7 @@ struct HelpView: View {
                     answer: """
                     Memories are short notes included with every question, such as your study preferences or course goals. Add your own in Profile → Saved memories.
 
-                    Agora can also add memories on its own: topics you keep returning to, and short facts the advisor picks up from your messages.
+                    Existing memories remain available. Agora can remember recurring topics locally, but automatic AI extraction of new facts is paused during the pilot to keep usage predictable.
 
                     In Saved memories you can edit or delete any memory, or use Delete all. When you're signed in, memories are saved to your account, and deleting one also removes it from your account.
                     """

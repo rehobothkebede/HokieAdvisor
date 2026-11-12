@@ -1,0 +1,6 @@
+2026-11-10: limited live checks; no user session or student data.
+OPTIONS chat/audit/transcript/dars/tutoring: 200
+OPTIONS courses: 404 NOT_FOUND (Requested function was not found)
+Anonymous malformed-body probes: chat 400; audit/transcript/dars 401; tutoring 400; courses 404.
+Anonymous valid chat probe: 200, reply AUTH_PROBE. One harmless AI response requested.
+Anonymous empty tutoring payload: 400 TUTORING_COURSES_REQUIRED. Successful anonymous tutoring was not tested.

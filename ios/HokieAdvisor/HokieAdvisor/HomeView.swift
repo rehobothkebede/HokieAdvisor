@@ -44,6 +44,10 @@ struct HomeView: View {
                 .padding(.horizontal, AgoraSpacing.xl - 4)
             }
             .scrollIndicators(.hidden)
+            .refreshable {
+                await courseStore.load(force: true)
+                await courseStore.loadCourses(force: true)
+            }
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 geometry.contentOffset.y
             } action: { _, offset in
@@ -373,9 +377,9 @@ struct HomeView: View {
                         .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Ask your advisor")
+                    Text("Ask MyAdvisor")
                         .font(.subheadline.weight(.semibold))
-                    Text("Courses, plans, or a tricky concept.")
+                    Text("Degree requirements, course planning, and next steps.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

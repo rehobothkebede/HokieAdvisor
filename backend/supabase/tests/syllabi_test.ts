@@ -14,6 +14,7 @@ import { type Deps, handleAction } from "../functions/courses/handler.ts";
 import { QA_RECORDINGS, QA_V1_EXTRACTION, QA_V1_PAGES } from "./fixtures/qa_syllabi.ts";
 import { buildPDF } from "./fixtures/make_qa_pdfs.ts";
 import { asAnon, asUser, createTestDatabase, createUser } from "./harness.ts";
+import { allowExtraction } from "./quota_fixtures.ts";
 import { fileBytes, PgliteStore } from "./store_pglite.ts";
 
 const SPRING = { name: "Spring 2027", classes_begin: "2027-01-19", finals_end: "2027-05-12", timezone: "America/New_York" };
@@ -158,7 +159,7 @@ const recorded: Extractor = (pages) => {
 };
 
 function deps(userId: string, extractor: Extractor = recorded): Deps {
-  return { store: new PgliteStore(db, userId), now: () => NOW, userId, extractor };
+  return { store: new PgliteStore(db, userId), now: () => NOW, userId, extractor, reserveExtraction: allowExtraction };
 }
 
 function uploadBody(courseId: string, pages = QA_V1_PAGES, bytes = buildPDF(pages)) {

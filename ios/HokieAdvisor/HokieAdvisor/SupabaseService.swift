@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import OSLog
 
 nonisolated enum SupabaseConfig {
     // The anon key is safe to ship in the app when RLS policies are correct.
@@ -35,8 +36,12 @@ nonisolated enum SupabaseAuthError: LocalizedError {
             return "Supabase did not return a session. Check whether email confirmation is required."
         case .missingUser:
             return "Supabase did not return the authenticated user."
-        case .keychain:
-            return "Could not securely store the Supabase session."
+        case .keychain(let status):
+            #if DEBUG
+            return "Could not securely save your sign-in (Keychain error \(status)). Try running the app directly from Xcode with signing enabled."
+            #else
+            return "Could not securely save your sign-in. Unlock your device and try again."
+            #endif
         case .server(let message):
             return message
         case .network(let error):
@@ -585,16 +590,33 @@ nonisolated enum SupabaseErrorDetail: Decodable {
 }
 
 private nonisolated enum KeychainStore {
+    private static let logger = Logger(subsystem: "com.hokieadvisor.HokieAdvisor", category: "SessionStorage")
+
     static func save(_ data: Data, service: String) throws {
-        delete(service: service)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
+        ]
+        let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else { throw SupabaseAuthError.keychain(status) }
+        // Keep the existing service identifier so sessions survive app updates.
+        // Update in place: a failed write must not delete a valid saved session.
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            let item = query.merging(attributes) { _, new in new }
+            status = SecItemAdd(item as CFDictionary, nil)
+            if status == errSecDuplicateItem {
+                status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+            }
+        }
+        guard status == errSecSuccess else {
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown Keychain error"
+            // Never log session data, passwords, or tokens.
+            logger.error("Session save failed: \(status, privacy: .public), \(message, privacy: .public)")
+            throw SupabaseAuthError.keychain(status)
+        }
     }
 
     static func read(service: String) -> Data? {
